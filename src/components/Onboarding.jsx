@@ -2,7 +2,13 @@ import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
 import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS } from '../lib/bodyComp.js';
 
-const STEPS = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','ACTIVITY','GENERATING','PLAN'];
+// Step list is gender-aware: females get an extra HIP step needed by AR 600-9.
+const baseSteps = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','NECK'];
+const stepsForGender = (gender) => [
+  ...baseSteps,
+  ...(gender === 'F' ? ['HIP'] : []),
+  'ACTIVITY','GENERATING','PLAN',
+];
 
 export default function Onboarding({ onComplete, existingProfile = {} }) {
   const [step, setStep] = useState(0);
@@ -19,11 +25,15 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
     heightIn: totalIn ? String(totalIn % 12) : '',
     weight: existingProfile?.weight ? String(existingProfile.weight) : '',
     waist: existingProfile?.waist ? String(existingProfile.waist) : '',
+    neck: existingProfile?.neck ? String(existingProfile.neck) : '',
+    hip: existingProfile?.hip ? String(existingProfile.hip) : '',
     activityLevel: existingProfile?.activityLevel || 'moderate',
     name: existingProfile?.name || '',
     unit: existingProfile?.unit || '',
     mos: existingProfile?.mos || '',
   });
+
+  const STEPS = stepsForGender(profile.gender);
 
   const set = (key, val) => setProfile((p) => ({ ...p, [key]: val }));
 
@@ -39,6 +49,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           age: parseInt(profile.age),
           gender: profile.gender,
           waistIn: profile.waist ? parseFloat(profile.waist) : null,
+          neckIn:  profile.neck  ? parseFloat(profile.neck)  : null,
+          hipIn:   profile.hip   ? parseFloat(profile.hip)   : null,
           activityLevel: profile.activityLevel,
         });
         setPlan(p);
@@ -55,6 +67,16 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
 
   const back = () => { if (step > 1) setStep((s) => s - 1); };
 
+  // "Skip tape test" button on WAIST step jumps past NECK (and HIP for women)
+  // straight to ACTIVITY without firing the formula until then.
+  const skipToActivity = () => {
+    const activityIdx = STEPS.indexOf('ACTIVITY');
+    if (activityIdx >= 0) {
+      setAnimating(true);
+      setTimeout(() => { setStep(activityIdx); setAnimating(false); }, 180);
+    }
+  };
+
   const finish = () => {
     const heightInTotal = (parseInt(profile.heightFt || 0) * 12) + parseInt(profile.heightIn || 0);
     onComplete({
@@ -65,6 +87,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
         height: heightInTotal.toString(),
         weight: profile.weight,
         waist: profile.waist,
+        neck: profile.neck,
+        hip: profile.hip,
         activityLevel: profile.activityLevel,
         name: profile.name,
         unit: profile.unit,
@@ -198,7 +222,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
             <div style={st.stepTitle}>AGE</div>
             <div style={st.stepSub}>Used to calculate basal metabolic rate and ACFT age brackets.</div>
             <div style={st.bigInputWrap}>
-              <input style={st.bigInput} type="number" inputMode="numeric" placeholder="28" min="17" max="65"
+              <input style={st.bigInput} type="number" inputMode="numeric" placeholder="25" min="17" max="65"
                 value={profile.age} onChange={(e) => set('age', e.target.value)} />
               <span style={st.bigInputUnit}>YRS</span>
             </div>
@@ -219,7 +243,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 <span style={st.bigInputUnit}>FT</span>
               </div>
               <div style={st.heightField}>
-                <input style={st.bigInput} type="number" inputMode="numeric" placeholder="10" min="0" max="11"
+                <input style={st.bigInput} type="number" inputMode="numeric" placeholder="5" min="0" max="11"
                   value={profile.heightIn} onChange={(e) => set('heightIn', e.target.value)} />
                 <span style={st.bigInputUnit}>IN</span>
               </div>
@@ -235,7 +259,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
             <div style={st.stepTitle}>CURRENT WEIGHT</div>
             <div style={st.stepSub}>Your current body weight in pounds.</div>
             <div style={st.bigInputWrap}>
-              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="195" min="80" max="400"
+              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="165" min="80" max="400"
                 value={profile.weight} onChange={(e) => set('weight', e.target.value)} />
               <span style={st.bigInputUnit}>LBS</span>
             </div>
@@ -247,15 +271,47 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
         {currentStep === 'WAIST' && (
           <div style={st.step}>
             <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
-            <div style={st.stepTitle}>WAIST CIRCUMFERENCE</div>
-            <div style={st.stepSub}>Measured at navel level. Improves body fat estimate accuracy. Optional — tap Skip to continue.</div>
+            <div style={st.stepTitle}>WAIST</div>
+            <div style={st.stepSub}>Measured at the navel, exhaled. Required for the AR 600-9 body fat calculation. Tap Skip if you don't have a tape — the estimate will be less accurate.</div>
             <div style={st.bigInputWrap}>
-              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="34.5" min="20" max="70" step="0.5"
+              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="30" min="20" max="70" step="0.5"
                 value={profile.waist} onChange={(e) => set('waist', e.target.value)} />
               <span style={st.bigInputUnit}>IN</span>
             </div>
             <button style={st.primaryBtn} onClick={advance}>CONTINUE →</button>
-            <button style={st.skipBtn} onClick={() => { set('waist', ''); advance(); }}>SKIP</button>
+            <button style={st.skipBtn} onClick={() => { set('waist', ''); set('neck', ''); set('hip', ''); skipToActivity(); }}>SKIP TAPE TEST</button>
+          </div>
+        )}
+
+        {currentStep === 'NECK' && (
+          <div style={st.step}>
+            <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
+            <div style={st.stepTitle}>NECK</div>
+            <div style={st.stepSub}>Measured just below the larynx (Adam's apple), tape level around the neck. Pairs with waist for the Army's official body fat formula.</div>
+            <div style={st.bigInputWrap}>
+              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="15" min="10" max="25" step="0.25"
+                value={profile.neck} onChange={(e) => set('neck', e.target.value)} />
+              <span style={st.bigInputUnit}>IN</span>
+            </div>
+            <button style={{ ...st.primaryBtn, opacity: profile.neck ? 1 : 0.4 }}
+              onClick={() => profile.neck && advance()}>CONTINUE →</button>
+            <button style={st.skipBtn} onClick={() => { set('neck', ''); advance(); }}>SKIP</button>
+          </div>
+        )}
+
+        {currentStep === 'HIP' && (
+          <div style={st.step}>
+            <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
+            <div style={st.stepTitle}>HIP</div>
+            <div style={st.stepSub}>Measured at the widest point of the hips, tape level. Female AR 600-9 formula needs this in addition to waist + neck.</div>
+            <div style={st.bigInputWrap}>
+              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="38" min="25" max="70" step="0.5"
+                value={profile.hip} onChange={(e) => set('hip', e.target.value)} />
+              <span style={st.bigInputUnit}>IN</span>
+            </div>
+            <button style={{ ...st.primaryBtn, opacity: profile.hip ? 1 : 0.4 }}
+              onClick={() => profile.hip && advance()}>CONTINUE →</button>
+            <button style={st.skipBtn} onClick={() => { set('hip', ''); advance(); }}>SKIP</button>
           </div>
         )}
 
@@ -307,7 +363,17 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
             </div>
 
             <div style={st.planCard}>
-              <div style={st.planCardLabel}>BODY COMPOSITION ASSESSMENT</div>
+              <div style={st.planCardLabel}>
+                BODY COMPOSITION ASSESSMENT
+                <span style={st.bfMethodTag}>
+                  {plan.bfMethod === 'army' ? '· AR 600-9' : '· EST FROM BMI'}
+                </span>
+              </div>
+              {!plan.bfAccurate && (
+                <div style={st.bfWarning}>
+                  Estimate only — for an accurate read, re-run intake with waist + neck measurements.
+                </div>
+              )}
               <div style={st.bfRow}>
                 <div style={st.bfCenter}>
                   <div style={st.bfVal}>{plan.bf}%</div>
@@ -333,38 +399,54 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                   <span style={st.bfStatLbl}>TARGET WEIGHT</span>
                 </div>
                 <div style={st.bfStat}>
-                  <span style={st.bfStatVal}>{plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : 'ON TARGET'}</span>
+                  <span style={st.bfStatVal}>{plan.alreadyLean ? 'AT TARGET' : plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : 'ON TARGET'}</span>
                   <span style={st.bfStatLbl}>ETA</span>
                 </div>
               </div>
             </div>
 
             <div style={st.planCard}>
-              <div style={st.planCardLabel}>DAILY NUTRITION TARGETS</div>
+              <div style={st.planCardLabel}>DAILY NUTRITION · {plan.alreadyLean ? 'MAINTAIN' : 'FAT LOSS'}</div>
               <div style={st.nutritionGrid}>
                 <div style={st.nutriBox}>
-                  <div style={st.nutriVal}>{plan.fatLossCals}</div>
+                  <div style={st.nutriVal}>{plan.goalCals}</div>
                   <div style={st.nutriUnit}>KCAL</div>
-                  <div style={st.nutriLbl}>FAT LOSS</div>
+                  <div style={st.nutriLbl}>{plan.alreadyLean ? 'MAINTENANCE' : 'CUT'}</div>
                 </div>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.protein}g</div>
                   <div style={st.nutriUnit}>PROTEIN</div>
-                  <div style={st.nutriLbl}>HIGH PRIORITY</div>
+                  <div style={st.nutriLbl}>{plan.protein * 4} KCAL</div>
                 </div>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.carbs}g</div>
                   <div style={st.nutriUnit}>CARBS</div>
-                  <div style={st.nutriLbl}>FUEL</div>
+                  <div style={st.nutriLbl}>{plan.carbs * 4} KCAL</div>
                 </div>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.fat}g</div>
                   <div style={st.nutriUnit}>FAT</div>
-                  <div style={st.nutriLbl}>HORMONAL</div>
+                  <div style={st.nutriLbl}>{plan.fat * 9} KCAL</div>
                 </div>
               </div>
+              {!plan.alreadyLean && (
+                <div style={st.calorieOptions}>
+                  <div style={st.calOpt}>
+                    <span style={st.calOptVal}>{plan.maintenanceCals.toLocaleString()}</span>
+                    <span style={st.calOptLbl}>MAINTAIN</span>
+                  </div>
+                  <div style={{ ...st.calOpt, background:'rgba(122,140,66,0.12)', borderColor:'var(--accent)' }}>
+                    <span style={{ ...st.calOptVal, color:'var(--accent)' }}>{plan.fatLossCals.toLocaleString()}</span>
+                    <span style={st.calOptLbl}>CUT (-500)</span>
+                  </div>
+                  <div style={st.calOpt}>
+                    <span style={st.calOptVal}>{plan.aggressiveCals.toLocaleString()}</span>
+                    <span style={st.calOptLbl}>AGGRESSIVE (-750)</span>
+                  </div>
+                </div>
+              )}
               <div style={st.maintenanceNote}>
-                Maintenance: {plan.tdee.toLocaleString()} kcal/day · BMR: {plan.bmr.toLocaleString()} kcal
+                BMR {plan.bmr.toLocaleString()} kcal · TDEE {plan.tdee.toLocaleString()} kcal · LBM {plan.leanMassLbs} lbs
               </div>
             </div>
 
@@ -465,6 +547,12 @@ const st = {
   planTitle: { fontFamily:'var(--font-head)', fontSize:22, color:'var(--text)', fontWeight:800, letterSpacing:'0.1em' },
   planCard: { background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:4, padding:'12px 14px', marginBottom:10 },
   planCardLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--text-muted)', fontWeight:700, marginBottom:10 },
+  bfMethodTag: { fontSize:8, color:'var(--accent)', marginLeft:8, fontWeight:600, letterSpacing:'0.1em' },
+  bfWarning: { background:'rgba(180,140,40,0.12)', border:'1px solid rgba(180,140,40,0.3)', color:'#d4ad6a', fontSize:10, padding:'6px 10px', borderRadius:3, marginBottom:10, lineHeight:1.4 },
+  calorieOptions: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginTop:10, marginBottom:8 },
+  calOpt: { background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:3, padding:'6px 4px', textAlign:'center' },
+  calOptVal: { display:'block', fontFamily:'var(--font-head)', fontSize:14, color:'var(--text-dim)', fontWeight:700, lineHeight:1 },
+  calOptLbl: { fontSize:7, color:'var(--text-muted)', letterSpacing:'0.08em', marginTop:3, display:'block' },
 
   bfRow: { display:'flex', alignItems:'center', justifyContent:'center', gap:20, marginBottom:12 },
   bfCenter: { textAlign:'center' },

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
+import { formatHeight } from '../lib/bodyComp.js';
 
 const RANKS = [
   'PVT','PV2','PFC','SPC','CPL',
@@ -135,16 +136,43 @@ const Profile = ({ data, saveData, onReonboard }) => {
           </div>
         )}
 
+        {(profile.height || profile.weight || profile.waist) && (
+          <div style={st.measureSummary}>
+            <div style={st.planSummaryLabel}>MEASUREMENTS</div>
+            <div style={st.planSummaryRow}>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{formatHeight(profile.height)}</span>
+                <span style={st.planSummaryLbl}>HEIGHT</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{profile.weight ? `${profile.weight} lb` : '—'}</span>
+                <span style={st.planSummaryLbl}>WEIGHT</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{profile.waist ? `${profile.waist} in` : '—'}</span>
+                <span style={st.planSummaryLbl}>WAIST</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{profile.neck ? `${profile.neck} in` : '—'}</span>
+                <span style={st.planSummaryLbl}>NECK</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {data.plan && (
           <div style={st.planSummary}>
-            <div style={st.planSummaryLabel}>CURRENT PLAN</div>
+            <div style={st.planSummaryLabel}>
+              CURRENT PLAN
+              <span style={st.planMethodTag}>{data.plan.bfMethod === 'army' ? '· AR 600-9' : '· EST'}</span>
+            </div>
             <div style={st.planSummaryRow}>
               <div style={st.planSummaryStat}>
                 <span style={st.planSummaryVal}>{data.plan.bf}%</span>
                 <span style={st.planSummaryLbl}>EST. BF</span>
               </div>
               <div style={st.planSummaryStat}>
-                <span style={st.planSummaryVal}>{data.plan.fatLossCals}</span>
+                <span style={st.planSummaryVal}>{data.plan.goalCals}</span>
                 <span style={st.planSummaryLbl}>KCAL/DAY</span>
               </div>
               <div style={st.planSummaryStat}>
@@ -194,8 +222,10 @@ const st = {
   idRank: { fontSize:10, letterSpacing:'0.14em', color:'var(--accent)', fontWeight:700 },
   idName: { fontFamily:'var(--font-head)', fontSize:22, color:'var(--text)', fontWeight:800, letterSpacing:'0.06em', marginTop:2 },
   idMeta: { fontSize:10, color:'var(--text-muted)', marginTop:4, letterSpacing:'0.06em' },
+  measureSummary: { background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:4, padding:'12px 14px', marginBottom:12 },
   planSummary: { background:'rgba(122,140,66,0.06)', border:'1px solid rgba(122,140,66,0.25)', borderRadius:4, padding:'12px 14px', marginBottom:12 },
   planSummaryLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--accent)', fontWeight:700, marginBottom:8 },
+  planMethodTag: { fontSize:8, color:'var(--text-muted)', marginLeft:8, fontWeight:600, letterSpacing:'0.1em' },
   planSummaryRow: { display:'flex', gap:8 },
   planSummaryStat: { flex:1, textAlign:'center' },
   planSummaryVal: { display:'block', fontFamily:'var(--font-head)', fontSize:18, color:'var(--text)', fontWeight:800, lineHeight:1 },
