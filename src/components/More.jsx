@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { usePWAInstall } from '../lib/install.js';
 
 const More = ({ data, saveData, setTab }) => {
   const [view, setView] = useState('hub');
+  const install = usePWAInstall();
 
   if (view === 'weighin') return <WeighIn data={data} saveData={saveData} onBack={() => setView('hub')} />;
   if (view === 'water') return <Water data={data} saveData={saveData} onBack={() => setView('hub')} />;
   if (view === 'sleep') return <Sleep data={data} saveData={saveData} onBack={() => setView('hub')} />;
+  if (view === 'install_ios') return <IOSInstallGuide onBack={() => setView('hub')} />;
 
   const today = new Date().toDateString();
   const waterTodayOz = (data.water || []).filter(w => new Date(w.date).toDateString() === today).reduce((s, e) => s + e.oz, 0);
@@ -43,9 +46,45 @@ const More = ({ data, saveData, setTab }) => {
     ), label:'SOLDIER PROFILE', sub:'Rank, unit, MOS', val: data.profile?.rank ? `${data.profile.rank} ${data.profile.name||''}`.trim() : '—' },
   ];
 
+  const shareLink = async () => {
+    const url = window.location.href.split('#')[0];
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Endure', text: 'Privacy-first military fitness tracker.', url });
+      } catch { /* user cancelled */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Link copied to clipboard.');
+    } catch {
+      prompt('Copy this link:', url);
+    }
+  };
+
   return (
     <div style={st.screen}>
       <div style={st.header}>MORE</div>
+
+      {!install.isStandalone && (install.canInstall || install.isIOS) && (
+        <div style={st.installCard}>
+          <div style={{ flex:1 }}>
+            <div style={st.installTitle}>INSTALL ENDURE</div>
+            <div style={st.installSub}>
+              {install.canInstall
+                ? 'Add to your home screen for offline access and a full-screen, app-like experience.'
+                : 'Tap below for instructions to add Endure to your iPhone home screen.'}
+            </div>
+          </div>
+          <button
+            style={st.installBtn}
+            onClick={() => install.canInstall ? install.install() : setView('install_ios')}
+          >
+            INSTALL
+          </button>
+        </div>
+      )}
+
       {menuItems.map(item => (
         <button key={item.id} style={st.menuItem} onClick={() => {
           if (item.nav) setTab(item.nav);
@@ -60,6 +99,21 @@ const More = ({ data, saveData, setTab }) => {
           <span style={st.menuArrow}>›</span>
         </button>
       ))}
+
+      <button style={st.menuItem} onClick={shareLink}>
+        <span style={st.menuIcon}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+        </span>
+        <div style={{ flex:1 }}>
+          <div style={st.menuLabel}>SHARE LINK</div>
+          <div style={st.menuSub}>Send Endure to a battle buddy</div>
+        </div>
+        <span style={st.menuArrow}>›</span>
+      </button>
+
       <div style={st.privacyNote}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" style={{ marginRight: 6, flexShrink: 0 }}>
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -69,6 +123,45 @@ const More = ({ data, saveData, setTab }) => {
     </div>
   );
 };
+
+// iOS doesn't expose an install API. Show step-by-step instructions instead.
+const IOSInstallGuide = ({ onBack }) => (
+  <div style={st.subScreen}>
+    <div style={st.subHeader}>
+      <button style={st.backBtn} onClick={onBack}>←</button>
+      <span style={st.subTitle}>INSTALL ON iOS</span>
+      <div style={{ width:32 }}></div>
+    </div>
+    <div style={{ flex:1, overflowY:'auto', padding:'0 16px 24px' }}>
+      <div style={st.iosCard}>
+        <div style={st.iosStep}>
+          <div style={st.iosStepNum}>1</div>
+          <div style={st.iosStepText}>
+            <div style={st.iosStepTitle}>Tap the Share button</div>
+            <div style={st.iosStepSub}>The square-with-arrow icon at the bottom of Safari (or the top, on iPad).</div>
+          </div>
+        </div>
+        <div style={st.iosStep}>
+          <div style={st.iosStepNum}>2</div>
+          <div style={st.iosStepText}>
+            <div style={st.iosStepTitle}>Scroll down → "Add to Home Screen"</div>
+            <div style={st.iosStepSub}>You may need to scroll past the share targets.</div>
+          </div>
+        </div>
+        <div style={st.iosStep}>
+          <div style={st.iosStepNum}>3</div>
+          <div style={st.iosStepText}>
+            <div style={st.iosStepTitle}>Tap "Add"</div>
+            <div style={st.iosStepSub}>Endure now lives on your home screen and launches full-screen, no browser bar.</div>
+          </div>
+        </div>
+      </div>
+      <div style={st.iosNote}>
+        Endure must be opened in Safari to install. Chrome on iOS doesn't support home-screen installs.
+      </div>
+    </div>
+  </div>
+);
 
 const WeighIn = ({ data, onBack, saveData }) => {
   const [input, setInput] = useState('');
@@ -306,6 +399,17 @@ const Sleep = ({ data, onBack, saveData }) => {
 const st = {
   screen: { flex:1, overflowY:'auto', padding:0 },
   header: { fontFamily:'var(--font-head)', fontSize:22, letterSpacing:'0.14em', color:'var(--text)', fontWeight:700, padding:'20px 16px 12px' },
+  installCard: { display:'flex', alignItems:'center', gap:12, margin:'0 16px 16px', padding:'14px', background:'rgba(122,140,66,0.10)', border:'1px solid rgba(122,140,66,0.35)', borderRadius:4 },
+  installTitle: { fontFamily:'var(--font-head)', fontSize:13, color:'var(--accent)', letterSpacing:'0.14em', fontWeight:700 },
+  installSub: { fontSize:11, color:'var(--text-dim)', marginTop:4, lineHeight:1.4 },
+  installBtn: { height:44, padding:'0 18px', background:'var(--accent)', border:'none', color:'var(--bg)', fontFamily:'var(--font-head)', fontSize:12, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, fontWeight:800, flexShrink:0 },
+  iosCard: { background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:4, padding:'8px 0', marginTop:16 },
+  iosStep: { display:'flex', alignItems:'flex-start', gap:14, padding:'14px 16px', borderBottom:'1px solid var(--border-subtle)' },
+  iosStepNum: { width:28, height:28, borderRadius:'50%', background:'rgba(122,140,66,0.15)', color:'var(--accent)', fontFamily:'var(--font-head)', fontSize:14, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
+  iosStepText: { flex:1 },
+  iosStepTitle: { fontSize:13, fontWeight:700, color:'var(--text)', letterSpacing:'0.04em' },
+  iosStepSub: { fontSize:11, color:'var(--text-muted)', marginTop:3, lineHeight:1.5 },
+  iosNote: { fontSize:11, color:'var(--text-muted)', marginTop:14, padding:'12px', background:'var(--surface-1)', border:'1px solid var(--border-subtle)', borderRadius:3, lineHeight:1.5 },
   menuItem: { display:'flex', alignItems:'center', gap:14, width:'100%', padding:16, background:'none', border:'none', borderBottom:'1px solid var(--border)', cursor:'pointer', textAlign:'left' },
   menuIcon: { color:'var(--accent)', width:28, flexShrink:0, display:'flex' },
   menuLabel: { fontSize:13, fontWeight:700, letterSpacing:'0.08em', color:'var(--text)' },
