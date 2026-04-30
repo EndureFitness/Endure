@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import RankInsignia from './RankInsignia.jsx';
 
 const RANKS = [
   'PVT','PV2','PFC','SPC','CPL',
@@ -14,7 +15,7 @@ const BRANCHES = [
   'Quartermaster','Transportation','Ordnance','Cyber','Other',
 ];
 
-const Profile = ({ data, saveData }) => {
+const Profile = ({ data, saveData, onReonboard }) => {
   const profile = data.profile || {};
   const [form, setForm] = useState({
     rank: profile.rank || '',
@@ -123,23 +124,50 @@ const Profile = ({ data, saveData }) => {
         {(form.rank || form.name) && (
           <div style={st.idCard}>
             <div style={st.idCardAccent}></div>
-            <div style={{ flex:1 }}>
+            {form.rank && <div style={{ flexShrink:0 }}><RankInsignia rank={form.rank} size={44} /></div>}
+            <div style={{ flex:1, minWidth:0 }}>
               <div style={st.idRank}>{form.rank}</div>
               <div style={st.idName}>{form.name || 'SOLDIER'}</div>
               <div style={st.idMeta}>
                 {[form.mos, form.unit, form.branch].filter(Boolean).join(' · ')}
               </div>
             </div>
-            <svg style={st.idChevron} width="36" height="36" viewBox="0 0 40 40" fill="none">
-              <polygon points="20,4 36,20 20,28 4,20" fill="none" stroke="var(--accent)" strokeWidth="1.5" opacity="0.6"/>
-              <polygon points="20,10 30,20 20,26 10,20" fill="var(--accent)" opacity="0.2"/>
-            </svg>
+          </div>
+        )}
+
+        {data.plan && (
+          <div style={st.planSummary}>
+            <div style={st.planSummaryLabel}>CURRENT PLAN</div>
+            <div style={st.planSummaryRow}>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{data.plan.bf}%</span>
+                <span style={st.planSummaryLbl}>EST. BF</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{data.plan.fatLossCals}</span>
+                <span style={st.planSummaryLbl}>KCAL/DAY</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{data.plan.protein}g</span>
+                <span style={st.planSummaryLbl}>PROTEIN</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{data.plan.weeklyMiles}</span>
+                <span style={st.planSummaryLbl}>MI/WK</span>
+              </div>
+            </div>
           </div>
         )}
 
         <button style={st.saveBtnFull} onClick={save}>
           {saved ? '✓ PROFILE SAVED' : 'SAVE PROFILE'}
         </button>
+
+        {onReonboard && (
+          <button style={st.reonboardBtn} onClick={onReonboard}>
+            ↻ RE-RUN INTAKE / REGENERATE PLAN
+          </button>
+        )}
       </div>
     </div>
   );
@@ -166,8 +194,14 @@ const st = {
   idRank: { fontSize:10, letterSpacing:'0.14em', color:'var(--accent)', fontWeight:700 },
   idName: { fontFamily:'var(--font-head)', fontSize:22, color:'var(--text)', fontWeight:800, letterSpacing:'0.06em', marginTop:2 },
   idMeta: { fontSize:10, color:'var(--text-muted)', marginTop:4, letterSpacing:'0.06em' },
-  idChevron: { flexShrink:0, opacity:0.6 },
+  planSummary: { background:'rgba(122,140,66,0.06)', border:'1px solid rgba(122,140,66,0.25)', borderRadius:4, padding:'12px 14px', marginBottom:12 },
+  planSummaryLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--accent)', fontWeight:700, marginBottom:8 },
+  planSummaryRow: { display:'flex', gap:8 },
+  planSummaryStat: { flex:1, textAlign:'center' },
+  planSummaryVal: { display:'block', fontFamily:'var(--font-head)', fontSize:18, color:'var(--text)', fontWeight:800, lineHeight:1 },
+  planSummaryLbl: { fontSize:8, color:'var(--text-muted)', letterSpacing:'0.1em', marginTop:3 },
   saveBtnFull: { width:'100%', height:52, background:'var(--accent)', border:'none', color:'var(--bg)', fontFamily:'var(--font-head)', fontSize:14, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:700, marginTop:8 },
+  reonboardBtn: { width:'100%', height:44, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text-muted)', fontFamily:'var(--font-head)', fontSize:11, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, fontWeight:700, marginTop:8 },
 };
 
 export default Profile;

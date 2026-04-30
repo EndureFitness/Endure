@@ -1,4 +1,5 @@
 import { gradeTotal } from '../lib/acftScoring.js';
+import RankInsignia from './RankInsignia.jsx';
 
 const Dashboard = ({ data, setScreen }) => {
   const { workouts = [], weights = [], nutrition = [] } = data;
@@ -67,12 +68,15 @@ const Dashboard = ({ data, setScreen }) => {
   return (
     <div style={st.screen}>
       <div style={st.header}>
-        <div>
-          <div style={st.greeting}>
-            {profile.rank ? `${profile.rank} ${(profile.name||'').split(',')[0]}` : 'ENDURE'}
-          </div>
-          <div style={st.subGreeting}>
-            {profile.unit ? `${profile.unit} · ${profile.mos || ''}` : 'Track. Improve. Endure.'}
+        <div style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0 }}>
+          {profile.rank && <RankInsignia rank={profile.rank} size={40} />}
+          <div style={{ minWidth:0 }}>
+            <div style={st.greeting}>
+              {profile.rank ? `${profile.rank} ${(profile.name||'').split(',')[0]}` : 'ENDURE'}
+            </div>
+            <div style={st.subGreeting}>
+              {profile.unit ? `${profile.unit} · ${profile.mos || ''}` : 'Track. Improve. Endure.'}
+            </div>
           </div>
         </div>
         <div><span style={st.badge}>LOCAL</span></div>

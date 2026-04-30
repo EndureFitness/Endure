@@ -11,12 +11,18 @@ const SEED = {
   workouts: [],
   weights: [],
   nutrition: [],
+  // Default macros — overwritten by the personalised plan once Onboarding completes.
   nutritionGoals: { calories: 2500, protein: 180, carbs: 250, fat: 80 },
   water: [],
   waterGoal: 120,
   sleep: [],
   acft: [],
-  profile: { rank: '', name: '', unit: '', mos: '', branch: '', age: '', gender: 'M', height: '', notes: '' },
+  profile: {
+    rank: '', name: '', unit: '', mos: '', branch: '',
+    age: '', gender: '', height: '', weight: '', waist: '',
+    activityLevel: 'moderate', notes: '',
+  },
+  plan: null, // BMR/TDEE/macros bundle from lib/bodyComp.js — set by Onboarding.
 };
 
 export function loadData() {
