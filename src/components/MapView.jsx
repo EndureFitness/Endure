@@ -44,10 +44,12 @@ export default function MapView({ points, lastPoint, height = 240 }) {
         attributionControl={true}
         style={{ height: '100%', width: '100%' }}
       >
+        {/* CARTO Dark Matter — true dark basemap, OSM data, free + no API key. */}
         <TileLayer
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          maxZoom={19}
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          subdomains="abcd"
+          maxZoom={20}
         />
         {path.length > 1 && (
           <Polyline positions={path} pathOptions={{ color: '#7a8c42', weight: 4, lineCap: 'round', lineJoin: 'round' }} />

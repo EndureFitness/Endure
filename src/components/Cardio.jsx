@@ -205,6 +205,20 @@ export default function Cardio({ data, saveData }) {
   }
 
   // ── Hub ──────────────────────────────────────────────────────────────────
+  const allWorkouts = data.workouts || [];
+  const recentCardio = [...allWorkouts]
+    .filter(w => TYPES.includes(w.type))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+  const totalSessions = allWorkouts.filter(w => TYPES.includes(w.type)).length;
+
+  const fmtDuration = (sec) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+  const typeColors = { Ruck:'#7a8c42', Run:'#4a8a6e', Walk:'#8a7a3e', Cardio:'#7a4a6e' };
+
   return (
     <div style={st.screen}>
       <div style={st.header}>
@@ -236,6 +250,51 @@ export default function Cardio({ data, saveData }) {
         <div style={st.tip}>
           Keep the screen on during your session. Browsers can't track GPS in the background — Endure will keep the display awake while you train.
         </div>
+
+        <div style={st.historyHeader}>
+          <div style={st.hubLabel}>RECENT SESSIONS</div>
+          <div style={st.historyMeta}>{totalSessions} TOTAL</div>
+        </div>
+
+        {recentCardio.length === 0 ? (
+          <div style={st.historyEmpty}>
+            No sessions logged yet. Start your first ruck above.
+          </div>
+        ) : (
+          <>
+            {recentCardio.map(w => (
+              <div key={w.id} style={st.historyRow}>
+                <div style={{ ...st.historyDot, background: typeColors[w.type] || 'var(--accent)' }}></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={st.historyType}>
+                    {w.type.toUpperCase()}
+                    {w.source === 'manual' && <span style={st.historyTag}> · MANUAL</span>}
+                  </div>
+                  <div style={st.historyDate}>
+                    {new Date(w.date).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
+                  </div>
+                </div>
+                <div style={st.historyStats}>
+                  <div style={st.historyStat}>
+                    <div style={st.historyStatVal}>{(w.distance || 0).toFixed(2)}</div>
+                    <div style={st.historyStatLbl}>MI</div>
+                  </div>
+                  <div style={st.historyStat}>
+                    <div style={st.historyStatVal}>{fmtDuration(w.duration || 0)}</div>
+                    <div style={st.historyStatLbl}>TIME</div>
+                  </div>
+                  <div style={st.historyStat}>
+                    <div style={st.historyStatVal}>{w.pace || '--'}</div>
+                    <div style={st.historyStatLbl}>PACE</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {totalSessions > recentCardio.length && (
+              <div style={st.historyHint}>Tap MORE → ACTIVITY LOG to see all {totalSessions} sessions.</div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -349,4 +408,18 @@ const st = {
   summaryType: { fontSize:11, letterSpacing:'0.18em', color:'var(--accent)', fontWeight:700 },
   summaryTime: { fontFamily:'var(--font-head)', fontSize:48, color:'var(--text)', fontWeight:800, marginTop:6, letterSpacing:'0.04em' },
   summarySub: { fontSize:12, color:'var(--text-dim)', marginTop:6 },
+  // History list
+  historyHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:24 },
+  historyMeta: { fontSize:9, color:'var(--text-muted)', letterSpacing:'0.14em', fontWeight:600 },
+  historyEmpty: { fontSize:11, color:'var(--text-muted)', textAlign:'center', padding:'18px 0', fontStyle:'italic' },
+  historyRow: { display:'flex', alignItems:'center', gap:10, padding:'12px 0', borderBottom:'1px solid var(--border-subtle)' },
+  historyDot: { width:3, height:36, borderRadius:2, flexShrink:0 },
+  historyType: { fontSize:12, fontWeight:700, letterSpacing:'0.06em', color:'var(--text)' },
+  historyTag: { fontSize:9, color:'var(--text-muted)', letterSpacing:'0.08em', fontWeight:600 },
+  historyDate: { fontSize:10, color:'var(--text-muted)', marginTop:2 },
+  historyStats: { display:'flex', gap:10, alignItems:'center' },
+  historyStat: { textAlign:'center', minWidth:36 },
+  historyStatVal: { fontFamily:'var(--font-head)', fontSize:13, color:'var(--text)', fontWeight:700, lineHeight:1 },
+  historyStatLbl: { fontSize:8, color:'var(--text-muted)', letterSpacing:'0.1em', marginTop:2 },
+  historyHint: { fontSize:10, color:'var(--text-muted)', textAlign:'center', padding:'12px 0 0', letterSpacing:'0.04em' },
 };

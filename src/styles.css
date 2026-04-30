@@ -172,4 +172,5 @@ button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   color: var(--text) !important;
   border-color: var(--border) !important;
 }
-.leaflet-tile { filter: brightness(0.7) saturate(0.7) hue-rotate(-10deg); }
+/* CARTO Dark is already dark; just nudge it green-ward to match our theme. */
+.leaflet-tile { filter: hue-rotate(-15deg) saturate(0.85); }

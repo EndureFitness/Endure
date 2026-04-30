@@ -39,13 +39,15 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,woff2,png,svg,webmanifest}'],
         runtimeCaching: [
           {
-            // Cache OSM tiles you've already loaded so previously-run
-            // routes still render their map when offline.
-            urlPattern: ({ url }) => url.hostname.endsWith('tile.openstreetmap.org'),
+            // Cache CARTO dark-matter tiles (and OSM raw, just in case) so
+            // previously-run routes still render their map when offline.
+            urlPattern: ({ url }) =>
+              url.hostname.endsWith('basemaps.cartocdn.com') ||
+              url.hostname.endsWith('tile.openstreetmap.org'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'osm-tiles',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheName: 'map-tiles',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
