@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import MapView from './MapView.jsx';
 import { useGeolocationTracker, useWakeLock, paceFromPoints, metersToMiles } from '../lib/geo.js';
+import { useStepCounter, requestMotionPermission } from '../lib/steps.js';
 
 // Calorie burn rate per minute, by activity. Rough values matching the mockup.
 const CAL_PER_MIN = { Ruck: 9, Run: 11, Walk: 6, Cardio: 10 };
@@ -27,10 +28,16 @@ export default function Cardio({ data, saveData }) {
   const tickRef = useRef(null);
 
   const tracker = useGeolocationTracker({ active: mode === 'active', activityType });
+  const stepCounter = useStepCounter({ active: mode === 'active' && running, activityType });
   useWakeLock(mode === 'active' && running);
 
   const distanceM = tracker.distanceM;
   const distanceMi = metersToMiles(distanceM);
+  // Fall back to step-derived distance when GPS hasn't reported anything yet
+  // (indoor track, dense canopy, signal loss). Once GPS distance > 0, use it.
+  const stepDistMi = metersToMiles(stepCounter.distanceM);
+  const effectiveDistMi = distanceMi > 0.01 ? distanceMi : stepDistMi;
+  const usingSteps = effectiveDistMi > 0 && distanceMi <= 0.01 && stepCounter.steps > 0;
 
   // Tick the elapsed clock once per second while running (regardless of GPS).
   useEffect(() => {
@@ -59,7 +66,11 @@ export default function Cardio({ data, saveData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, mode]);
 
-  const startSession = () => {
+  const startSession = async () => {
+    // iOS 13+ requires the motion permission to be requested from a user
+    // gesture. Do it here on the start tap; non-iOS devices return
+    // 'not-required' immediately and this is a no-op.
+    await requestMotionPermission();
     setElapsed(0);
     setPausedDurations(0);
     startTimeRef.current = Date.now();
@@ -79,17 +90,22 @@ export default function Cardio({ data, saveData }) {
 
   const finishSession = () => {
     setRunning(false);
+    const finalDistMi = parseFloat(effectiveDistMi.toFixed(2));
+    const source = tracker.points.length > 0
+      ? 'gps'
+      : (stepCounter.steps > 0 ? 'steps' : 'manual');
     const session = {
       id: Date.now(),
       type: activityType,
       date: new Date().toISOString(),
       duration: elapsed,
-      distance: parseFloat(distanceMi.toFixed(2)),
+      distance: finalDistMi,
       calories: Math.floor((elapsed / 60) * (CAL_PER_MIN[activityType] || 10)),
       pace: paceFromPoints(tracker.points, 60, 'mi'),
       elevGainFt: Math.round(tracker.elevGainM * 3.2808),
+      steps: stepCounter.steps,
       route: tracker.points.map(({ lat, lng, t }) => ({ lat, lng, t })),
-      source: tracker.points.length > 0 ? 'gps' : 'manual',
+      source,
     };
     setLastSession(session);
     saveData({ ...data, workouts: [...(data.workouts || []), session] });
@@ -146,9 +162,9 @@ export default function Cardio({ data, saveData }) {
 
         <div style={st.statsGrid}>
           {[
-            { val: distanceMi.toFixed(2), unit: 'MI', label: 'DISTANCE' },
+            { val: effectiveDistMi.toFixed(2), unit: usingSteps ? 'MI · STEP EST' : 'MI', label: 'DISTANCE' },
             { val: pace, unit: '/MI', label: 'PACE' },
-            { val: tracker.elevGainM > 0 ? Math.round(tracker.elevGainM * 3.2808) : '--', unit: 'FT', label: 'ELEV GAIN' },
+            { val: stepCounter.steps || '--', unit: 'STEPS', label: 'STEP COUNT' },
             { val: Math.floor((elapsed / 60) * (CAL_PER_MIN[activityType] || 10)), unit: 'CAL', label: 'CALORIES' },
           ].map((s, i) => (
             <div key={i} style={st.statCell}>

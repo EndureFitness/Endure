@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { usePWAInstall } from '../lib/install.js';
+import OfflineMaps from './OfflineMaps.jsx';
 
 const More = ({ data, saveData, setTab }) => {
   const [view, setView] = useState('hub');
@@ -9,6 +10,7 @@ const More = ({ data, saveData, setTab }) => {
   if (view === 'water') return <Water data={data} saveData={saveData} onBack={() => setView('hub')} />;
   if (view === 'sleep') return <Sleep data={data} saveData={saveData} onBack={() => setView('hub')} />;
   if (view === 'install_ios') return <IOSInstallGuide onBack={() => setView('hub')} />;
+  if (view === 'offline_maps') return <OfflineMaps onBack={() => setView('hub')} />;
 
   const today = new Date().toDateString();
   const waterTodayOz = (data.water || []).filter(w => new Date(w.date).toDateString() === today).reduce((s, e) => s + e.oz, 0);
@@ -32,6 +34,12 @@ const More = ({ data, saveData, setTab }) => {
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
       </svg>
     ), label:'SLEEP', sub:'Rest & recovery log', val: sleepToday ? `${sleepToday.hours}h` : '—' },
+    { id:'offline_maps', icon:(
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+      </svg>
+    ), label:'OFFLINE MAPS', sub:'Pre-download tiles for training areas', val: '' },
     { id:'log_nav', nav:'log', icon:(
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
