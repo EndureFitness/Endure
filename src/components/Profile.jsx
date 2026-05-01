@@ -153,8 +153,8 @@ const Profile = ({ data, saveData, onReonboard }) => {
                 <span style={st.planSummaryLbl}>WAIST</span>
               </div>
               <div style={st.planSummaryStat}>
-                <span style={st.planSummaryVal}>{profile.neck ? `${profile.neck} in` : '—'}</span>
-                <span style={st.planSummaryLbl}>NECK</span>
+                <span style={st.planSummaryVal}>{data.plan?.hrs ?? '—'}</span>
+                <span style={st.planSummaryLbl}>HRS</span>
               </div>
             </div>
           </div>
@@ -162,15 +162,8 @@ const Profile = ({ data, saveData, onReonboard }) => {
 
         {data.plan && (
           <div style={st.planSummary}>
-            <div style={st.planSummaryLabel}>
-              CURRENT PLAN
-              <span style={st.planMethodTag}>{data.plan.bfMethod === 'army' ? '· AR 600-9' : '· EST'}</span>
-            </div>
+            <div style={st.planSummaryLabel}>CURRENT PLAN</div>
             <div style={st.planSummaryRow}>
-              <div style={st.planSummaryStat}>
-                <span style={st.planSummaryVal}>{data.plan.bf}%</span>
-                <span style={st.planSummaryLbl}>EST. BF</span>
-              </div>
               <div style={st.planSummaryStat}>
                 <span style={st.planSummaryVal}>{data.plan.goalCals}</span>
                 <span style={st.planSummaryLbl}>KCAL/DAY</span>
@@ -180,8 +173,12 @@ const Profile = ({ data, saveData, onReonboard }) => {
                 <span style={st.planSummaryLbl}>PROTEIN</span>
               </div>
               <div style={st.planSummaryStat}>
-                <span style={st.planSummaryVal}>{data.plan.weeklyMiles}</span>
-                <span style={st.planSummaryLbl}>MI/WK</span>
+                <span style={st.planSummaryVal}>{data.plan.carbs}g</span>
+                <span style={st.planSummaryLbl}>CARBS</span>
+              </div>
+              <div style={st.planSummaryStat}>
+                <span style={st.planSummaryVal}>{data.plan.fat}g</span>
+                <span style={st.planSummaryLbl}>FAT</span>
               </div>
             </div>
           </div>

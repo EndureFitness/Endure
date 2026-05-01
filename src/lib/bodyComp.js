@@ -1,24 +1,22 @@
 // Body composition + nutrition planning.
 //
-// Body fat: AR 600-9 (Army Body Composition Program) when neck (and hip for
-// women) circumference is provided — this is the official Army standard and is
-// the most accurate no-equipment method. Falls back to a clamped Deurenberg
-// BMI estimate when the user skips the tape-measure steps, with a flag so the
-// UI can warn that the number is rough.
+// Two things are calculated, independently:
 //
-// BMR: Mifflin-St Jeor only. Long-running comparisons (Frankenfield 2005)
-// found it the single most accurate prediction equation; blending three
-// formulas just averages in the weaker ones. Katch-McArdle would be more
-// accurate IF we had a precise body-fat number — we don't, so it isn't.
+// 1. Calorie + macro targets — driven ONLY by Mifflin-St Jeor BMR,
+//    activity multiplier, and bodyweight. Waist circumference does NOT
+//    enter this path. Protein is bodyweight × 1g/lb; fat and carbs fill
+//    the remaining calories.
 //
-// TDEE: BMR × activity multiplier. Multipliers are at the conservative end of
-// the published range; soldiers (and everyone) tend to over-pick activity, so
-// pull the answer back toward "you probably move less than you think."
+// 2. Body composition reference — Height-to-Abdomen Ratio (HRS) as the
+//    primary number (this is what AR 600-9 actually uses since 2023; the
+//    old multi-site neck+hip method is retired). RFM (Relative Fat Mass,
+//    Woolcott & Bergman 2018) gives a rough body-fat percentage from the
+//    same inputs for those who want a number. Both are shown as
+//    informational; neither feeds into calories.
 
 const ARMY_TARGET_BF = 13.0;
+const HRS_STANDARD   = 0.55;   // AR 600-9: must be ≤ 0.55 to meet height-abdomen standard
 
-// Slightly conservative vs. the textbook 1.2 / 1.375 / 1.55 / 1.725 / 1.9.
-// Same idea, less inflation.
 const ACTIVITY_MULTIPLIERS = {
   sedentary:  1.2,
   light:      1.35,
@@ -27,27 +25,31 @@ const ACTIVITY_MULTIPLIERS = {
   veryActive: 1.8,
 };
 
-const log10 = (x) => Math.log10(x);
+// ── Body fat reference (informational only, never feeds calorie math) ─────
 
-// ── Body fat ──────────────────────────────────────────────────────────────
-
-// AR 600-9 (the official Army formula — what your S-1 uses for tape tests).
-// Inputs in inches. Returns BF% as a number.
-export function bodyFatArmy({ gender, heightIn, waistIn, neckIn, hipIn }) {
-  if (gender === 'M') {
-    if (!waistIn || !neckIn || waistIn <= neckIn) return null;
-    return 86.010 * log10(waistIn - neckIn) - 70.041 * log10(heightIn) + 36.76;
-  }
-  if (gender === 'F') {
-    if (!waistIn || !neckIn || !hipIn || waistIn + hipIn <= neckIn) return null;
-    return 163.205 * log10(waistIn + hipIn - neckIn) - 97.684 * log10(heightIn) - 78.387;
-  }
-  return null;
+// Height-to-abdomen ratio. Lower is leaner. ≤ 0.55 meets the Army standard.
+export function calcHRS(waistIn, heightIn) {
+  if (!waistIn || !heightIn) return null;
+  return parseFloat((waistIn / heightIn).toFixed(3));
 }
 
-// Deurenberg BMI-based fallback when the user skipped circumferences.
-// Tends to overestimate for athletic builds; flagged so UI can warn.
-export function bodyFatDeurenberg({ weightLbs, heightIn, age, gender }) {
+export function hrsCategory(hrs) {
+  if (hrs == null) return null;
+  if (hrs <= 0.43) return 'VERY LEAN';
+  if (hrs <= 0.49) return 'ATHLETIC';
+  if (hrs <= 0.55) return 'WITHIN STANDARD';
+  return 'OVER STANDARD';
+}
+
+// Relative Fat Mass (Woolcott & Bergman, 2018). Single-site, no neck.
+// Tends to overestimate slightly for athletic builds — flagged as estimate.
+function rfm({ heightIn, waistIn, gender }) {
+  const constant = gender === 'F' ? 76 : 64;
+  return constant - 20 * (heightIn / waistIn);
+}
+
+// Deurenberg BMI fallback when no waist measurement.
+function deurenberg({ weightLbs, heightIn, age, gender }) {
   const weightKg = weightLbs * 0.453592;
   const heightCm = heightIn * 2.54;
   const bmi = weightKg / (heightCm / 100) ** 2;
@@ -56,22 +58,20 @@ export function bodyFatDeurenberg({ weightLbs, heightIn, age, gender }) {
     : 1.20 * bmi + 0.23 * age - 5.4;
 }
 
-export function estimateBodyFat(input) {
-  const army = bodyFatArmy(input);
-  if (army != null && army > 0) {
-    return { bf: clamp(army, 3, 50), method: 'army', accurate: true };
-  }
-  const fallback = bodyFatDeurenberg(input);
-  return { bf: clamp(fallback, 5, 50), method: 'bmi', accurate: false };
-}
-
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, parseFloat(v.toFixed(1))));
+
+export function estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn }) {
+  if (waistIn) {
+    return { bf: clamp(rfm({ heightIn, waistIn, gender }), 3, 50), method: 'rfm' };
+  }
+  return { bf: clamp(deurenberg({ weightLbs, heightIn, age, gender }), 5, 50), method: 'bmi' };
+}
 
 // ── Plan ──────────────────────────────────────────────────────────────────
 
 export function calcPlan({
   weightLbs, heightIn, age, gender,
-  waistIn, neckIn, hipIn,
+  waistIn,                      // reference only — does not affect cals/macros
   activityLevel,
 }) {
   const weightKg = weightLbs * 0.453592;
@@ -84,58 +84,72 @@ export function calcPlan({
 
   const tdee = Math.round(bmr * (ACTIVITY_MULTIPLIERS[activityLevel] || 1.45));
 
-  // Body fat & lean mass
-  const { bf, method, accurate } = estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn, neckIn, hipIn });
-  const leanMassLbs = weightLbs * (1 - bf / 100);
-
-  // Fat-loss math: hold LBM constant, drop body fat to Army standard 13%.
-  const targetWeightLbs = leanMassLbs / (1 - ARMY_TARGET_BF / 100);
-  const fatToLoseLbs = Math.max(0, parseFloat((weightLbs - targetWeightLbs).toFixed(1)));
-  const weeksToGoal = Math.ceil(fatToLoseLbs); // ~1 lb/wk @ 500 kcal deficit
-  const alreadyLean = bf <= ARMY_TARGET_BF + 0.5;
-
-  // Daily calorie targets — three options, capped at 1200 floor.
+  // Three calorie options. CUT is the saved goal unless the user is
+  // already at/below the Army BF standard, in which case we recommend
+  // MAINTAIN instead.
   const maintenanceCals = tdee;
-  const fatLossCals     = Math.max(1200, tdee - 500);   // 1 lb/wk
-  const aggressiveCals  = Math.max(1200, tdee - 750);   // 1.5 lb/wk
-  // Calorie goal we actually save: maintenance if already at standard, else moderate cut.
-  const goalCals = alreadyLean ? maintenanceCals : fatLossCals;
+  const fatLossCals     = Math.max(1200, tdee - 500);
+  const aggressiveCals  = Math.max(1200, tdee - 750);
 
-  // Macros — 1g protein per lb LBM, ~30% fat / 70% carb of remainder.
-  const proteinG = Math.round(leanMassLbs * 1.0);
+  // Body comp reference — does NOT influence the math above.
+  const hrs = calcHRS(waistIn, heightIn);
+  const { bf, method } = estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn });
+  const overStandard = hrs != null && hrs > HRS_STANDARD;
+  const alreadyLean  = waistIn ? hrs != null && hrs <= 0.49 : bf <= ARMY_TARGET_BF + 0.5;
+  const goalCals     = alreadyLean ? maintenanceCals : fatLossCals;
+
+  // Macros — protein straight from bodyweight, no LBM detour.
+  // 1g/lb is a high-end fat-loss target that protects muscle in a deficit.
+  const proteinG    = Math.round(weightLbs * 1.0);
   const proteinCals = proteinG * 4;
   const remainingCals = Math.max(0, goalCals - proteinCals);
-  const fatG = Math.round((remainingCals * 0.30) / 9);
-  const carbG = Math.round((remainingCals * 0.70) / 4);
+  // 25% of total cals from fat — minimum for hormonal health, with the rest as carbs.
+  const fatG  = Math.round((goalCals * 0.25) / 9);
+  const fatCals = fatG * 9;
+  const carbCals = Math.max(0, goalCals - proteinCals - fatCals);
+  const carbG = Math.round(carbCals / 4);
+
+  // Fat-to-lose estimate — informational, derived from BF reference.
+  const fatToLoseLbs = alreadyLean ? 0 : Math.max(0, parseFloat(((bf - ARMY_TARGET_BF) / 100 * weightLbs).toFixed(1)));
+  const targetWeightLbs = alreadyLean ? weightLbs : parseFloat((weightLbs - fatToLoseLbs).toFixed(1));
+  const weeksToGoal = Math.ceil(fatToLoseLbs);
 
   const waterOz = Math.round(weightLbs * 0.55);
-
   const weeklyMiles = activityLevel === 'sedentary' ? 8
     : activityLevel === 'light'      ? 12
     : activityLevel === 'moderate'   ? 16
     : activityLevel === 'active'     ? 20 : 25;
 
   return {
+    // Reference (informational only)
     bf: parseFloat(bf.toFixed(1)),
     bfMethod: method,
-    bfAccurate: accurate,
+    bfAccurate: method === 'rfm',
+    hrs,
+    hrsCategory: hrsCategory(hrs),
+    overStandard,
     targetBF: ARMY_TARGET_BF,
     alreadyLean,
     fatToLoseLbs,
-    targetWeightLbs: parseFloat(targetWeightLbs.toFixed(1)),
+    targetWeightLbs,
     weeksToGoal,
+
+    // Energy
     bmr: Math.round(bmr),
     tdee,
     maintenanceCals,
     fatLossCals,
     aggressiveCals,
     goalCals,
+
+    // Macros
     protein: proteinG,
     carbs: carbG,
     fat: fatG,
+
+    // Targets
     waterOz,
     weeklyMiles,
-    leanMassLbs: parseFloat(leanMassLbs.toFixed(1)),
   };
 }
 
@@ -158,11 +172,6 @@ export function formatHeight(totalInches) {
   return `${ft}′${inch}″`;
 }
 
-export function formatWaist(inches) {
-  if (!inches) return '—';
-  return `${inches} in`;
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────
 
 export const ALL_RANKS = [
@@ -171,8 +180,6 @@ export const ALL_RANKS = [
   { group: 'Officer',         ranks: ['2LT','1LT','CPT','MAJ','LTC','COL','BG','MG','LTG','GEN'] },
 ];
 
-// Tightened descriptions — most active-duty soldiers genuinely fall in MODERATE,
-// not ACTIVE. Reading these carefully should pull people toward an honest pick.
 export const ACTIVITY_LEVELS = [
   { id: 'sedentary',  label: 'SEDENTARY',   sub: 'Desk job, no scheduled training' },
   { id: 'light',      label: 'LIGHT',       sub: '1–2 short workouts/week' },

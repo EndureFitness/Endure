@@ -2,13 +2,10 @@ import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
 import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS } from '../lib/bodyComp.js';
 
-// Step list is gender-aware: females get an extra HIP step needed by AR 600-9.
-const baseSteps = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','NECK'];
-const stepsForGender = (gender) => [
-  ...baseSteps,
-  ...(gender === 'F' ? ['HIP'] : []),
-  'ACTIVITY','GENERATING','PLAN',
-];
+// AR 600-9 (2023+) uses a single waist measurement for both genders. No
+// neck or hip step. Calorie math is independent of waist; waist drives only
+// the HRS body-comp reference.
+const STEPS = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','ACTIVITY','GENERATING','PLAN'];
 
 export default function Onboarding({ onComplete, existingProfile = {} }) {
   const [step, setStep] = useState(0);
@@ -25,15 +22,11 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
     heightIn: totalIn ? String(totalIn % 12) : '',
     weight: existingProfile?.weight ? String(existingProfile.weight) : '',
     waist: existingProfile?.waist ? String(existingProfile.waist) : '',
-    neck: existingProfile?.neck ? String(existingProfile.neck) : '',
-    hip: existingProfile?.hip ? String(existingProfile.hip) : '',
     activityLevel: existingProfile?.activityLevel || 'moderate',
     name: existingProfile?.name || '',
     unit: existingProfile?.unit || '',
     mos: existingProfile?.mos || '',
   });
-
-  const STEPS = stepsForGender(profile.gender);
 
   const set = (key, val) => setProfile((p) => ({ ...p, [key]: val }));
 
@@ -49,8 +42,6 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           age: parseInt(profile.age),
           gender: profile.gender,
           waistIn: profile.waist ? parseFloat(profile.waist) : null,
-          neckIn:  profile.neck  ? parseFloat(profile.neck)  : null,
-          hipIn:   profile.hip   ? parseFloat(profile.hip)   : null,
           activityLevel: profile.activityLevel,
         });
         setPlan(p);
@@ -67,16 +58,6 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
 
   const back = () => { if (step > 1) setStep((s) => s - 1); };
 
-  // "Skip tape test" button on WAIST step jumps past NECK (and HIP for women)
-  // straight to ACTIVITY without firing the formula until then.
-  const skipToActivity = () => {
-    const activityIdx = STEPS.indexOf('ACTIVITY');
-    if (activityIdx >= 0) {
-      setAnimating(true);
-      setTimeout(() => { setStep(activityIdx); setAnimating(false); }, 180);
-    }
-  };
-
   const finish = () => {
     const heightInTotal = (parseInt(profile.heightFt || 0) * 12) + parseInt(profile.heightIn || 0);
     onComplete({
@@ -87,8 +68,6 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
         height: heightInTotal.toString(),
         weight: profile.weight,
         waist: profile.waist,
-        neck: profile.neck,
-        hip: profile.hip,
         activityLevel: profile.activityLevel,
         name: profile.name,
         unit: profile.unit,
@@ -272,46 +251,17 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           <div style={st.step}>
             <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
             <div style={st.stepTitle}>WAIST</div>
-            <div style={st.stepSub}>Measured at the navel, exhaled. Required for the AR 600-9 body fat calculation. Tap Skip if you don't have a tape — the estimate will be less accurate.</div>
+            <div style={st.stepSub}>
+              Measured at the navel, exhaled — same as the Army tape test. Used only to estimate your current body composition.{' '}
+              <strong style={{ color:'var(--text-dim)' }}>It does not change your calorie or macro targets.</strong> Skip if you don't have a tape handy.
+            </div>
             <div style={st.bigInputWrap}>
               <input style={st.bigInput} type="number" inputMode="decimal" placeholder="30" min="20" max="70" step="0.5"
                 value={profile.waist} onChange={(e) => set('waist', e.target.value)} />
               <span style={st.bigInputUnit}>IN</span>
             </div>
             <button style={st.primaryBtn} onClick={advance}>CONTINUE →</button>
-            <button style={st.skipBtn} onClick={() => { set('waist', ''); set('neck', ''); set('hip', ''); skipToActivity(); }}>SKIP TAPE TEST</button>
-          </div>
-        )}
-
-        {currentStep === 'NECK' && (
-          <div style={st.step}>
-            <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
-            <div style={st.stepTitle}>NECK</div>
-            <div style={st.stepSub}>Measured just below the larynx (Adam's apple), tape level around the neck. Pairs with waist for the Army's official body fat formula.</div>
-            <div style={st.bigInputWrap}>
-              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="15" min="10" max="25" step="0.25"
-                value={profile.neck} onChange={(e) => set('neck', e.target.value)} />
-              <span style={st.bigInputUnit}>IN</span>
-            </div>
-            <button style={{ ...st.primaryBtn, opacity: profile.neck ? 1 : 0.4 }}
-              onClick={() => profile.neck && advance()}>CONTINUE →</button>
-            <button style={st.skipBtn} onClick={() => { set('neck', ''); advance(); }}>SKIP</button>
-          </div>
-        )}
-
-        {currentStep === 'HIP' && (
-          <div style={st.step}>
-            <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
-            <div style={st.stepTitle}>HIP</div>
-            <div style={st.stepSub}>Measured at the widest point of the hips, tape level. Female AR 600-9 formula needs this in addition to waist + neck.</div>
-            <div style={st.bigInputWrap}>
-              <input style={st.bigInput} type="number" inputMode="decimal" placeholder="38" min="25" max="70" step="0.5"
-                value={profile.hip} onChange={(e) => set('hip', e.target.value)} />
-              <span style={st.bigInputUnit}>IN</span>
-            </div>
-            <button style={{ ...st.primaryBtn, opacity: profile.hip ? 1 : 0.4 }}
-              onClick={() => profile.hip && advance()}>CONTINUE →</button>
-            <button style={st.skipBtn} onClick={() => { set('hip', ''); advance(); }}>SKIP</button>
+            <button style={st.skipBtn} onClick={() => { set('waist', ''); advance(); }}>SKIP</button>
           </div>
         )}
 
@@ -364,42 +314,49 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
 
             <div style={st.planCard}>
               <div style={st.planCardLabel}>
-                BODY COMPOSITION ASSESSMENT
-                <span style={st.bfMethodTag}>
-                  {plan.bfMethod === 'army' ? '· AR 600-9' : '· EST FROM BMI'}
-                </span>
+                BODY COMPOSITION REFERENCE
+                <span style={st.bfMethodTag}>· AR 600-9 STD: HRS ≤ 0.55</span>
               </div>
-              {!plan.bfAccurate && (
+              {plan.hrs != null ? (
+                <>
+                  <div style={st.hrsRow}>
+                    <div style={st.hrsBig}>{plan.hrs}</div>
+                    <div style={st.hrsRight}>
+                      <div style={{ ...st.hrsCategory, color: plan.overStandard ? '#cc6666' : 'var(--accent)' }}>
+                        {plan.hrsCategory}
+                      </div>
+                      <div style={st.hrsCaption}>HEIGHT-TO-ABDOMEN RATIO</div>
+                    </div>
+                  </div>
+                  <div style={st.hrsBar}>
+                    <div style={{
+                      ...st.hrsBarFill,
+                      width: `${Math.min(plan.hrs / 0.65 * 100, 100)}%`,
+                      background: plan.overStandard ? '#cc6666' : 'var(--accent)',
+                    }}></div>
+                    <div style={{ ...st.hrsBarMark, left:`${0.55/0.65*100}%` }}></div>
+                  </div>
+                  <div style={st.hrsLegend}>
+                    <span>0.40</span><span style={{ color:'var(--accent)' }}>0.55 STD</span><span>0.65</span>
+                  </div>
+                </>
+              ) : (
                 <div style={st.bfWarning}>
-                  Estimate only — for an accurate read, re-run intake with waist + neck measurements.
+                  No waist measurement — body comp reference not available. Re-run intake with a waist measurement to see your HRS.
                 </div>
               )}
-              <div style={st.bfRow}>
-                <div style={st.bfCenter}>
-                  <div style={st.bfVal}>{plan.bf}%</div>
-                  <div style={st.bfLbl}>CURRENT EST. BF</div>
-                </div>
-                <div style={st.bfArrow}>→</div>
-                <div style={st.bfCenter}>
-                  <div style={{ ...st.bfVal, color:'var(--accent)' }}>{plan.targetBF}%</div>
-                  <div style={st.bfLbl}>TARGET BF</div>
-                </div>
-              </div>
-              <div style={st.bfBar}>
-                <div style={{ ...st.bfBarFill, width:`${Math.min(plan.bf/50*100,100)}%`, background: plan.bf <= 13 ? 'var(--accent)' : plan.bf <= 20 ? '#8a9a4a' : plan.bf <= 25 ? '#8a7a3e' : '#8a3a3e' }}></div>
-                <div style={{ ...st.bfTargetLine, left:`${13/50*100}%` }}></div>
-              </div>
-              <div style={st.bfStats}>
+
+              <div style={{ ...st.bfStats, marginTop: 12 }}>
                 <div style={st.bfStat}>
-                  <span style={st.bfStatVal}>{plan.fatToLoseLbs > 0 ? plan.fatToLoseLbs : '0'} lbs</span>
+                  <span style={st.bfStatVal}>~{plan.bf}%</span>
+                  <span style={st.bfStatLbl}>EST. BF (REF)</span>
+                </div>
+                <div style={st.bfStat}>
+                  <span style={st.bfStatVal}>{plan.fatToLoseLbs > 0 ? `${plan.fatToLoseLbs} lb` : '0 lb'}</span>
                   <span style={st.bfStatLbl}>FAT TO LOSE</span>
                 </div>
                 <div style={st.bfStat}>
-                  <span style={st.bfStatVal}>{plan.targetWeightLbs} lbs</span>
-                  <span style={st.bfStatLbl}>TARGET WEIGHT</span>
-                </div>
-                <div style={st.bfStat}>
-                  <span style={st.bfStatVal}>{plan.alreadyLean ? 'AT TARGET' : plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : 'ON TARGET'}</span>
+                  <span style={st.bfStatVal}>{plan.alreadyLean ? 'AT TARGET' : plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : '—'}</span>
                   <span style={st.bfStatLbl}>ETA</span>
                 </div>
               </div>
@@ -549,6 +506,15 @@ const st = {
   planCardLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--text-muted)', fontWeight:700, marginBottom:10 },
   bfMethodTag: { fontSize:8, color:'var(--accent)', marginLeft:8, fontWeight:600, letterSpacing:'0.1em' },
   bfWarning: { background:'rgba(180,140,40,0.12)', border:'1px solid rgba(180,140,40,0.3)', color:'#d4ad6a', fontSize:10, padding:'6px 10px', borderRadius:3, marginBottom:10, lineHeight:1.4 },
+  hrsRow: { display:'flex', alignItems:'center', gap:14, marginBottom:10 },
+  hrsBig: { fontFamily:'var(--font-head)', fontSize:48, color:'var(--text)', fontWeight:800, lineHeight:1 },
+  hrsRight: { flex:1 },
+  hrsCategory: { fontSize:11, fontWeight:700, letterSpacing:'0.12em' },
+  hrsCaption: { fontSize:9, color:'var(--text-muted)', letterSpacing:'0.1em', marginTop:3 },
+  hrsBar: { height:6, background:'var(--surface-2)', borderRadius:3, position:'relative', overflow:'visible' },
+  hrsBarFill: { height:'100%', borderRadius:3, transition:'width 0.5s ease' },
+  hrsBarMark: { position:'absolute', top:-3, bottom:-3, width:2, background:'var(--accent)', borderRadius:1 },
+  hrsLegend: { display:'flex', justifyContent:'space-between', fontSize:8, color:'var(--text-muted)', letterSpacing:'0.08em', marginTop:5 },
   calorieOptions: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginTop:10, marginBottom:8 },
   calOpt: { background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:3, padding:'6px 4px', textAlign:'center' },
   calOptVal: { display:'block', fontFamily:'var(--font-head)', fontSize:14, color:'var(--text-dim)', fontWeight:700, lineHeight:1 },
