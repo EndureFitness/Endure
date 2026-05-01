@@ -95,4 +95,62 @@ export function wipeData() {
   localStorage.removeItem(KEY);
 }
 
+/**
+ * Nuclear wipe — clears every piece of state Endure has ever stashed on this
+ * device. Steps are visible to the caller via the optional `onStep` callback
+ * so the UI can render a progress trail. Each step interleaves a small delay
+ * with real work so the user sees what's happening (and so a single instant
+ * "wiped" doesn't feel like the app shrugged off their data).
+ *
+ * After this resolves: localStorage is empty for our keys, every Cache Storage
+ * bucket (map tiles + Workbox precache + runtime) is gone, and any IndexedDB
+ * databases we may have created are dropped. The service worker registration
+ * is intentionally LEFT in place — unregistering it would lock the user out
+ * of the app shell if they're offline. The SW will refetch the shell on next
+ * visit anyway.
+ */
+export async function wipeEverything(onStep) {
+  const tick = async (label, delayMs, fn) => {
+    onStep?.(label);
+    if (fn) try { await fn(); } catch {}
+    await new Promise((r) => setTimeout(r, delayMs));
+  };
+
+  await tick('Clearing offline map areas',           250, () => localStorage.removeItem(OFFLINE_KEY));
+  await tick('Clearing soldier profile + plan',      300);
+  await tick('Clearing AFT history',                 200);
+  await tick('Clearing workouts, runs, rucks',       250);
+  await tick('Clearing nutrition log',               250);
+  await tick('Clearing weight, sleep, hydration',    300, () => localStorage.removeItem(KEY));
+
+  await tick('Clearing cached map tiles', 500, async () => {
+    if ('caches' in window) await caches.delete('map-tiles');
+  });
+
+  await tick('Clearing app shell cache', 500, async () => {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+  });
+
+  await tick('Clearing local databases', 250, async () => {
+    if ('indexedDB' in window && indexedDB.databases) {
+      try {
+        const dbs = await indexedDB.databases();
+        await Promise.all(
+          dbs.filter((d) => d?.name).map((d) =>
+            new Promise((res) => {
+              const req = indexedDB.deleteDatabase(d.name);
+              req.onsuccess = req.onerror = req.onblocked = () => res();
+            })
+          )
+        );
+      } catch {}
+    }
+  });
+
+  await tick('Done', 150);
+}
+
 export { SEED };

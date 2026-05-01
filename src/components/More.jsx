@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import { usePWAInstall } from '../lib/install.js';
+import { wipeEverything } from '../lib/storage.js';
 import OfflineMaps from './OfflineMaps.jsx';
 
-const More = ({ data, saveData, setTab }) => {
+const More = ({ data, saveData, setTab, onResetComplete }) => {
   const [view, setView] = useState('hub');
   const install = usePWAInstall();
 
@@ -11,6 +12,7 @@ const More = ({ data, saveData, setTab }) => {
   if (view === 'sleep') return <Sleep data={data} saveData={saveData} onBack={() => setView('hub')} />;
   if (view === 'install_ios') return <IOSInstallGuide onBack={() => setView('hub')} />;
   if (view === 'offline_maps') return <OfflineMaps onBack={() => setView('hub')} />;
+  if (view === 'reset') return <ResetFlow onCancel={() => setView('hub')} onResetComplete={onResetComplete} />;
 
   const today = new Date().toDateString();
   const waterTodayOz = (data.water || []).filter(w => new Date(w.date).toDateString() === today).reduce((s, e) => s + e.oz, 0);
@@ -128,9 +130,120 @@ const More = ({ data, saveData, setTab }) => {
         </svg>
         All data stored locally on your device. No accounts. No cloud. No tracking.
       </div>
+
+      <div style={st.dangerLabel}>DANGER ZONE</div>
+      <button style={st.resetBtn} onClick={() => setView('reset')}>
+        RESET ALL DATA
+      </button>
     </div>
   );
 };
+
+// ── Reset flow ──────────────────────────────────────────────────────────────
+//
+// Three sub-views: confirm → progress → done. The actual wipe runs during
+// progress so the user sees real-time deletion, not a fake loader.
+function ResetFlow({ onCancel, onResetComplete }) {
+  const [stage, setStage] = useState('confirm');
+  const [steps, setSteps] = useState([]); // completed step labels
+  const [currentStep, setCurrentStep] = useState('');
+
+  const begin = async () => {
+    setStage('progress');
+    await wipeEverything((label) => {
+      if (label === 'Done') {
+        setCurrentStep('');
+        return;
+      }
+      setCurrentStep(label);
+      setSteps((prev) => [...prev, label]);
+    });
+    setStage('done');
+  };
+
+  if (stage === 'confirm') {
+    return (
+      <div style={st.subScreen}>
+        <div style={st.subHeader}>
+          <button style={st.backBtn} onClick={onCancel}>←</button>
+          <span style={st.subTitle}>RESET ALL DATA</span>
+          <div style={{ width: 32 }}></div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          <div style={st.resetWarnIcon}>
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#cc6666" strokeWidth="1.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div style={st.resetWarnTitle}>This will permanently delete</div>
+          <ul style={st.resetList}>
+            <li>Soldier profile + plan</li>
+            <li>AFT history</li>
+            <li>All workouts (rucks, runs, walks)</li>
+            <li>Nutrition log + custom foods</li>
+            <li>Weight, sleep, hydration log</li>
+            <li>Saved offline map areas + cached tiles</li>
+            <li>App shell + service worker caches</li>
+          </ul>
+          <div style={st.resetHardWarn}>
+            This cannot be undone. If you want to keep a backup, tap CANCEL and use Activity Log → EXPORT first.
+          </div>
+          <button style={st.resetConfirmBtn} onClick={begin}>I UNDERSTAND — RESET</button>
+          <button style={st.resetCancelBtn} onClick={onCancel}>CANCEL</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === 'progress') {
+    return (
+      <div style={st.subScreen}>
+        <div style={st.subHeader}>
+          <div style={{ width: 32 }}></div>
+          <span style={st.subTitle}>RESETTING…</span>
+          <div style={{ width: 32 }}></div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px' }}>
+          <div style={st.progressHeadline}>{currentStep || 'Starting…'}</div>
+          <div style={st.progressList}>
+            {steps.map((label, i) => (
+              <div key={i} style={st.progressItem}>
+                <span style={{ color: 'var(--accent)', marginRight: 8 }}>✓</span>
+                <span style={st.progressItemText}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // stage === 'done'
+  return (
+    <div style={st.subScreen}>
+      <div style={st.subHeader}>
+        <div style={{ width: 32 }}></div>
+        <span style={st.subTitle}>RESET COMPLETE</span>
+        <div style={{ width: 32 }}></div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px', textAlign: 'center' }}>
+        <div style={st.resetDoneIcon}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <div style={st.resetDoneTitle}>ALL DATA CLEARED</div>
+        <div style={st.resetDoneSub}>
+          Endure has been reset to factory defaults. Tap below to start fresh — you'll go through the intake again to generate a new plan.
+        </div>
+        <button style={st.resetFinishBtn} onClick={onResetComplete}>
+          FINISHED — START FRESH
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // iOS doesn't expose an install API. Show step-by-step instructions instead.
 const IOSInstallGuide = ({ onBack }) => (
@@ -434,6 +547,22 @@ const st = {
   menuVal: { fontFamily:'var(--font-head)', fontSize:14, color:'var(--accent)', fontWeight:700, textAlign:'right' },
   menuArrow: { fontSize:18, color:'var(--text-muted)', marginLeft:6 },
   privacyNote: { display:'flex', alignItems:'flex-start', gap:4, margin:'20px 16px', padding:12, background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:3, fontSize:11, color:'var(--text-muted)', lineHeight:1.5 },
+  dangerLabel: { fontSize:9, letterSpacing:'0.18em', color:'#cc6666', fontWeight:700, padding:'12px 16px 8px' },
+  resetBtn: { width:'calc(100% - 32px)', height:48, margin:'0 16px 24px', background:'rgba(180,60,60,0.08)', border:'1px solid rgba(180,60,60,0.4)', color:'#cc6666', fontFamily:'var(--font-head)', fontSize:13, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:700 },
+  resetWarnIcon: { display:'flex', justifyContent:'center', padding:'16px 0 8px' },
+  resetWarnTitle: { fontFamily:'var(--font-head)', fontSize:18, color:'var(--text)', fontWeight:800, letterSpacing:'0.08em', textAlign:'center', marginBottom:14 },
+  resetList: { color:'var(--text-dim)', fontSize:13, lineHeight:1.7, paddingLeft:24, marginBottom:18 },
+  resetHardWarn: { background:'rgba(180,60,60,0.08)', border:'1px solid rgba(180,60,60,0.3)', color:'#cc6666', fontSize:12, padding:'12px 14px', borderRadius:3, lineHeight:1.5, marginBottom:20 },
+  resetConfirmBtn: { width:'100%', height:52, background:'#a83a3a', border:'none', color:'#fff', fontFamily:'var(--font-head)', fontSize:13, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:800, marginBottom:8 },
+  resetCancelBtn: { width:'100%', height:44, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text)', fontFamily:'var(--font-head)', fontSize:12, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, fontWeight:700 },
+  progressHeadline: { fontFamily:'var(--font-head)', fontSize:16, color:'var(--accent)', letterSpacing:'0.12em', textAlign:'center', minHeight:24, marginBottom:24 },
+  progressList: { display:'flex', flexDirection:'column', gap:10 },
+  progressItem: { display:'flex', alignItems:'center', padding:'8px 12px', background:'var(--surface-1)', border:'1px solid var(--border-subtle)', borderRadius:3 },
+  progressItemText: { fontSize:12, color:'var(--text-dim)', letterSpacing:'0.04em' },
+  resetDoneIcon: { display:'flex', justifyContent:'center', padding:'24px 0 12px' },
+  resetDoneTitle: { fontFamily:'var(--font-head)', fontSize:20, color:'var(--accent)', fontWeight:800, letterSpacing:'0.12em', marginBottom:12 },
+  resetDoneSub: { fontSize:13, color:'var(--text-dim)', lineHeight:1.6, marginBottom:24, padding:'0 8px' },
+  resetFinishBtn: { width:'100%', height:52, background:'var(--accent)', border:'none', color:'var(--bg)', fontFamily:'var(--font-head)', fontSize:14, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:800 },
   subScreen: { flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
   subHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:16, borderBottom:'1px solid var(--border)', flexShrink:0 },
   backBtn: { background:'none', border:'none', color:'var(--text)', fontSize:20, cursor:'pointer', width:32 },

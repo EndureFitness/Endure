@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { loadData, saveData as persist } from './lib/storage.js';
+import { loadData, saveData as persist, SEED } from './lib/storage.js';
 import { isProfileComplete, planToGoals } from './lib/bodyComp.js';
 import NavBar from './components/Nav.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -51,7 +51,7 @@ export default function App() {
     case 'nutrition': screen = <Nutrition data={data} saveData={saveData} />; break;
     case 'log':       screen = <Log       data={data} saveData={saveData} />; break;
     case 'profile':   screen = <Profile   data={data} saveData={saveData} onReonboard={() => setReonboarding(true)} />; break;
-    case 'more':      screen = <More      data={data} saveData={saveData} setTab={setTab} />; break;
+    case 'more':      screen = <More      data={data} saveData={saveData} setTab={setTab} onResetComplete={() => { setData(SEED); setTab('dashboard'); }} />; break;
     default:          screen = <Dashboard data={data} setScreen={setTab} />; break;
   }
 
