@@ -43,7 +43,12 @@ const Profile = ({ data, saveData, onReonboard }) => {
   const [saved, setSaved] = useState(false);
 
   const save = () => {
-    saveData({ ...data, profile: { ...form } });
+    // Merge over the EXISTING profile, not replace it. The form only edits 9
+    // fields (rank/name/unit/mos/branch/age/gender/height/notes); weight,
+    // waist, activityLevel and goal are set during onboarding and live on
+    // the same profile object. Spreading just `form` would clobber them and
+    // re-trigger the Onboarding gate via `isProfileComplete`.
+    saveData({ ...data, profile: { ...profile, ...form } });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
