@@ -31,16 +31,19 @@ const NavBar = ({ active, setActive }) => {
   ];
 
   return (
-    <nav style={s.nav}>
+    <nav style={s.nav} aria-label="Main navigation">
       {tabs.map(tab => (
         <button
           key={tab.id}
+          type="button"
           onClick={() => setActive(tab.id)}
+          aria-label={tab.label}
+          aria-current={active === tab.id ? 'page' : undefined}
           style={{ ...s.tab, color: active === tab.id ? 'var(--accent)' : 'var(--text-muted)' }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tab.icon}</span>
+          <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tab.icon}</span>
           <span style={s.label}>{tab.label}</span>
-          {active === tab.id && <span style={s.indicator}></span>}
+          {active === tab.id && <span aria-hidden="true" style={s.indicator}></span>}
         </button>
       ))}
     </nav>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { usePWAInstall } from '../lib/install.js';
 import OfflineMaps from './OfflineMaps.jsx';
 
@@ -188,6 +188,7 @@ const WeighIn = ({ data, onBack, saveData }) => {
   const latest = weights.length ? weights[weights.length - 1] : null;
 
   const SparkLine30 = () => {
+    const gradId = useId();
     if (recent.length < 2) return <div style={{ height:80, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)', fontSize:11 }}>Log more data to see trend</div>;
     const vals = recent.map(w => w.weight);
     const min = Math.min(...vals) - 2;
@@ -201,12 +202,12 @@ const WeighIn = ({ data, onBack, saveData }) => {
     return (
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display:'block', height:80 }}>
         <defs>
-          <linearGradient id="wGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25"/>
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0"/>
           </linearGradient>
         </defs>
-        <polyline points={`0,${H} ${pts} ${W},${H}`} fill="url(#wGrad)" stroke="none"/>
+        <polyline points={`0,${H} ${pts} ${W},${H}`} fill={`url(#${gradId})`} stroke="none"/>
         <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round"/>
         {recent.map((w, i) => {
           const x = (i / (recent.length - 1)) * W;

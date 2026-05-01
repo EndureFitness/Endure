@@ -88,11 +88,14 @@ export function useGeolocationTracker({ active, activityType = 'Cardio' }) {
         setDistanceM((d) => d + segM);
       }
 
-      // Elevation gain: only count when altitudeAccuracy is reliable.
-      if (altitude != null && altitudeAccuracy != null && altitudeAccuracy <= 15) {
+      // Elevation gain: count when altitudeAccuracy is plausible. Most phones
+      // report 20–40m altitude accuracy on open ground; 30m is a pragmatic
+      // gate that lets useful data through without piling up noise. Also
+      // ignore deltas above 50m (single-sample spike, not a real climb).
+      if (altitude != null && altitudeAccuracy != null && altitudeAccuracy <= 30) {
         if (lastAltRef.current != null) {
           const dAlt = altitude - lastAltRef.current;
-          if (dAlt > 0) setElevGainM((g) => g + dAlt);
+          if (dAlt > 0 && dAlt < 50) setElevGainM((g) => g + dAlt);
         }
         lastAltRef.current = altitude;
       }

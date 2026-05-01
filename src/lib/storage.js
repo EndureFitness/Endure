@@ -32,7 +32,10 @@ export function loadData() {
     const parsed = JSON.parse(raw);
     // Fill in any missing top-level keys from SEED (forward-compat).
     return { ...SEED, ...parsed };
-  } catch {
+  } catch (err) {
+    // Don't silently swallow — leaves the user thinking everything's fine when
+    // their data is wedged. They can decide whether to reset.
+    console.error('Failed to load saved data, falling back to seed:', err);
     return SEED;
   }
 }

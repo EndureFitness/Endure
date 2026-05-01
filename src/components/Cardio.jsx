@@ -7,9 +7,10 @@ import { useStepCounter, requestMotionPermission } from '../lib/steps.js';
 const CAL_PER_MIN = { Ruck: 9, Run: 11, Walk: 6, Cardio: 10 };
 
 const fmtTime = (sec) => {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const ss = sec % 60;
+  const s = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 };
 
@@ -90,6 +91,10 @@ export default function Cardio({ data, saveData }) {
 
   const finishSession = () => {
     setRunning(false);
+    // Stop the tick interval and clear refs so a fresh session starts clean.
+    clearInterval(tickRef.current);
+    startTimeRef.current = null;
+    pauseStartRef.current = null;
     const finalDistMi = parseFloat(effectiveDistMi.toFixed(2));
     const source = tracker.points.length > 0
       ? 'gps'

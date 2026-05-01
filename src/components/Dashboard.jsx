@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { gradeTotal } from '../lib/acftScoring.js';
 import RankInsignia from './RankInsignia.jsx';
 
@@ -12,9 +13,10 @@ const Dashboard = ({ data, setScreen }) => {
   const totalCals = weekWorkouts.reduce((s, w) => s + (w.calories || 0), 0);
 
   const fmtDuration = (sec) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const ss = sec % 60;
+    const s = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = s % 60;
     return `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
   };
 
@@ -34,6 +36,10 @@ const Dashboard = ({ data, setScreen }) => {
   const recentWeights = weights.filter(w => new Date(w.date) >= monthAgo);
 
   const SparkLine = ({ points, width = 220, height = 50, color = '#7a8c42' }) => {
+    // useId guarantees a unique gradient id per SparkLine instance — reusing
+    // the same SVG id across multiple instances breaks rendering of the later
+    // ones (the browser resolves url(#x) to the first match in the document).
+    const gradId = useId();
     if (points.length < 2) return <div style={{ height, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)', fontSize:11 }}>No data</div>;
     const vals = points.map(p => p.value);
     const min = Math.min(...vals);
@@ -47,13 +53,13 @@ const Dashboard = ({ data, setScreen }) => {
     return (
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow:'visible' }}>
         <defs>
-          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
             <stop offset="100%" stopColor={color} stopOpacity="0"/>
           </linearGradient>
         </defs>
         <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
-        <polyline points={`0,${height} ${pts} ${width},${height}`} fill="url(#sparkGrad)" stroke="none"/>
+        <polyline points={`0,${height} ${pts} ${width},${height}`} fill={`url(#${gradId})`} stroke="none"/>
       </svg>
     );
   };

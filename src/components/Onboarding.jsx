@@ -163,7 +163,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
               </div>
             )}
 
-            <button style={{ ...st.primaryBtn, opacity: profile.rank ? 1 : 0.4 }}
+            <button style={{ ...st.primaryBtn, opacity: profile.rank ? 1 : 0.4, cursor: profile.rank ? 'pointer' : 'not-allowed' }}
+              disabled={!profile.rank}
               onClick={() => profile.rank && advance()}>CONTINUE →</button>
           </div>
         )}
@@ -208,7 +209,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 value={profile.age} onChange={(e) => set('age', e.target.value)} />
               <span style={st.bigInputUnit}>YRS</span>
             </div>
-            <button style={{ ...st.primaryBtn, opacity: profile.age ? 1 : 0.4 }}
+            <button style={{ ...st.primaryBtn, opacity: profile.age ? 1 : 0.4, cursor: profile.age ? 'pointer' : 'not-allowed' }}
+              disabled={!profile.age}
               onClick={() => profile.age && advance()}>CONTINUE →</button>
           </div>
         )}
@@ -230,7 +232,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 <span style={st.bigInputUnit}>IN</span>
               </div>
             </div>
-            <button style={{ ...st.primaryBtn, opacity: (profile.heightFt && profile.heightIn !== '') ? 1 : 0.4 }}
+            <button style={{ ...st.primaryBtn, opacity: (profile.heightFt && profile.heightIn !== '') ? 1 : 0.4, cursor: (profile.heightFt && profile.heightIn !== '') ? 'pointer' : 'not-allowed' }}
+              disabled={!(profile.heightFt && profile.heightIn !== '')}
               onClick={() => (profile.heightFt && profile.heightIn !== '') && advance()}>CONTINUE →</button>
           </div>
         )}
@@ -245,7 +248,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 value={profile.weight} onChange={(e) => set('weight', e.target.value)} />
               <span style={st.bigInputUnit}>LBS</span>
             </div>
-            <button style={{ ...st.primaryBtn, opacity: profile.weight ? 1 : 0.4 }}
+            <button style={{ ...st.primaryBtn, opacity: profile.weight ? 1 : 0.4, cursor: profile.weight ? 'pointer' : 'not-allowed' }}
+              disabled={!profile.weight}
               onClick={() => profile.weight && advance()}>CONTINUE →</button>
           </div>
         )}
