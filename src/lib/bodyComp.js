@@ -69,14 +69,22 @@ export function estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn }) {
 
 // ── Plan ──────────────────────────────────────────────────────────────────
 
-// Single calorie delta per goal. Cut targets ~1.75 lb/wk fat loss (middle of
-// the 1.5–2 lb/wk band requested) — 875 kcal/day deficit, 3500 kcal per lb.
-// Floor at 1200 kcal/day prevents the deficit from going dangerously low for
-// smaller soldiers. Bulk bumps protein 10% per spec.
+// Per-goal calorie + protein config.
+//
+// CUT:      ~1.75 lb/wk fat loss (middle of 1.5–2 lb/wk band). 875 kcal/day
+//           deficit. Protein at 1g/lb bodyweight with a 190g floor — anyone
+//           under ~190 lb still gets enough protein to preserve muscle in
+//           the deficit. Larger soldiers scale past the floor.
+// MAINTAIN: 0 delta. Protein 1g/lb.
+// BULK:     +400 kcal/day for ~0.8 lb/wk lean gain. Protein 1.1g/lb (10%
+//           bump on top of maintain, per spec) to support muscle synthesis.
+//
+// The 1200 kcal/day floor in calcPlan() catches small users whose TDEE-deficit
+// math would otherwise drop into starvation territory.
 const GOAL_CONFIG = {
-  cut:      { delta: -875, proteinPerLb: 1.0 },
-  maintain: { delta:    0, proteinPerLb: 1.0 },
-  bulk:     { delta:  400, proteinPerLb: 1.1 },
+  cut:      { delta: -875, proteinPerLb: 1.0, minProtein: 190 },
+  maintain: { delta:    0, proteinPerLb: 1.0, minProtein: 0   },
+  bulk:     { delta:  400, proteinPerLb: 1.1, minProtein: 0   },
 };
 
 export function calcPlan({
@@ -98,8 +106,10 @@ export function calcPlan({
   const cfg = GOAL_CONFIG[goal] || GOAL_CONFIG.cut;
   const goalCals = Math.max(1200, tdee + cfg.delta);
 
-  // Protein straight from bodyweight, multiplier varies by goal.
-  const proteinG    = Math.round(weightLbs * cfg.proteinPerLb);
+  // Protein straight from bodyweight, multiplier varies by goal, with a
+  // per-goal floor (190g for cut so undersized soldiers still get enough
+  // to preserve muscle in a deficit).
+  const proteinG    = Math.max(cfg.minProtein || 0, Math.round(weightLbs * cfg.proteinPerLb));
   // 25% of total cals from fat — minimum for hormonal health.
   const fatG        = Math.round((goalCals * 0.25) / 9);
   const proteinCals = proteinG * 4;
@@ -156,9 +166,9 @@ export function calcPlan({
 }
 
 export const GOALS = [
-  { id: 'cut',      label: 'CUT',      sub: '~1.5–2 lb/week fat loss', delta: '−875 kcal' },
-  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',     delta: 'TDEE' },
-  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain',        delta: '+400 kcal' },
+  { id: 'cut',      label: 'CUT',      sub: '~1.5–2 lb/week · 190g+ protein', delta: '−875 kcal' },
+  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',            delta: 'TDEE' },
+  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain · +10% protein', delta: '+400 kcal' },
 ];
 
 export function planToGoals(plan) {
