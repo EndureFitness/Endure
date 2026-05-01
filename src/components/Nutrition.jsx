@@ -134,13 +134,13 @@ const Nutrition = ({ data, saveData }) => {
             {items.length === 0 && <div style={st.mealEmpty}>Nothing logged</div>}
             {items.map(e => (
               <div key={e.id} style={st.foodRow}>
-                <div>
+                <div style={st.foodInfoCol}>
                   <div style={st.foodName}>{e.name}</div>
                   <div style={st.foodMacros}>P {e.protein}g · C {e.carbs}g · F {e.fat}g</div>
                 </div>
                 <div style={st.foodRight}>
                   <span style={st.foodCals}>{e.calories}</span>
-                  <button style={st.deleteBtn} onClick={() => deleteEntry(e.id)}>✕</button>
+                  <button style={st.deleteBtn} onClick={() => deleteEntry(e.id)} aria-label="Delete entry">✕</button>
                 </div>
               </div>
             ))}
@@ -170,12 +170,13 @@ const st = {
   mealName: { fontSize:10, fontWeight:700, letterSpacing:'0.12em', color:'var(--text-muted)' },
   mealCals: { fontSize:10, color:'var(--text-muted)' },
   mealEmpty: { fontSize:11, color:'var(--text-muted)', padding:'6px 0', fontStyle:'italic' },
-  foodRow: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--border-subtle)' },
-  foodName: { fontSize:13, color:'var(--text)', fontWeight:600 },
+  foodRow: { display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid var(--border-subtle)' },
+  foodInfoCol: { flex:1, minWidth:0 },
+  foodName: { fontSize:13, color:'var(--text)', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
   foodMacros: { fontSize:10, color:'var(--text-muted)', marginTop:2 },
-  foodRight: { display:'flex', alignItems:'center', gap:10 },
+  foodRight: { display:'flex', alignItems:'center', gap:8, flexShrink:0 },
   foodCals: { fontFamily:'var(--font-head)', fontSize:18, color:'var(--text)', fontWeight:700 },
-  deleteBtn: { background:'none', border:'none', color:'var(--text-muted)', fontSize:11, cursor:'pointer' },
+  deleteBtn: { background:'none', border:'1px solid var(--border)', color:'var(--text-muted)', fontSize:12, cursor:'pointer', width:32, height:32, borderRadius:3, padding:0, display:'flex', alignItems:'center', justifyContent:'center' },
   addFoodBtn: { width:'100%', height:48, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--accent)', fontFamily:'var(--font-head)', fontSize:13, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, marginTop:16, fontWeight:700 },
   fieldGroup: { marginBottom:14 },
   fieldLabel: { display:'block', fontSize:10, letterSpacing:'0.1em', color:'var(--text-muted)', marginBottom:6, fontWeight:600 },

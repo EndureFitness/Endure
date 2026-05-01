@@ -88,6 +88,15 @@
   --text:         #e4e2d6;
   --text-dim:     #b0ae9e;
   --text-muted:   #6a6d5a;
+  /* Status colors — used for GPS, validation, ACFT pass/fail */
+  --error:        #cc6666;
+  --warn:         #d4ad6a;
+  --success:      #7a8c42; /* alias of --accent */
+  /* Activity type accents — used in Log, Cardio history, Dashboard dots */
+  --type-ruck:    #7a8c42; /* alias of --accent */
+  --type-run:     #4a8a6e;
+  --type-walk:    #8a7a3e;
+  --type-cardio:  #7a4a6e;
   --font-head:    'Barlow Condensed', sans-serif;
   --font-body:    'Barlow', sans-serif;
 }

@@ -3,8 +3,20 @@ import MapView from './MapView.jsx';
 import { useGeolocationTracker, useWakeLock, paceFromPoints, metersToMiles } from '../lib/geo.js';
 import { useStepCounter, requestMotionPermission } from '../lib/steps.js';
 
-// Calorie burn rate per minute, by activity. Rough values matching the mockup.
-const CAL_PER_MIN = { Ruck: 9, Run: 11, Walk: 6, Cardio: 10 };
+// Calorie burn rate per minute. Ruck scales with pack weight — empirical
+// rule of thumb is ~0.07 cal/min/lb of pack on top of an unloaded baseline of
+// ~7 cal/min for a 175 lb soldier. So a 30 lb pack ≈ 9.1, 45 lb ≈ 10.15,
+// 60 lb ≈ 11.2. Aligns with the Pandolf equation across typical military loads.
+const CAL_PER_MIN = { Run: 11, Walk: 6, Cardio: 10 };
+const ruckCalPerMin = (packLbs) => 7 + 0.07 * (Number(packLbs) || 30);
+const calPerMin = (type, packLbs) =>
+  type === 'Ruck' ? ruckCalPerMin(packLbs) : (CAL_PER_MIN[type] || 10);
+
+// AR 670-1 spec for ACFT-prep rucks is 35 lb dry minimum; FORSCOM standard
+// loaded ruck is 35 lb. Some training plans use 20 lb for entry-level. Floor
+// here is 20 lb dry to enforce a sensible minimum.
+const RUCK_MIN_LBS = 20;
+const RUCK_DEFAULT_LBS = 35;
 
 const fmtTime = (sec) => {
   const s = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
@@ -19,6 +31,12 @@ const TYPES = ['Ruck', 'Run', 'Walk', 'Cardio'];
 export default function Cardio({ data, saveData }) {
   const [mode, setMode] = useState('hub'); // hub | active | summary | manual
   const [activityType, setActivityType] = useState('Ruck');
+  // Default to last-used ruck weight so soldiers don't re-enter it every time.
+  const lastRuck = (() => {
+    const last = [...(data.workouts || [])].reverse().find(w => w.type === 'Ruck' && w.ruckWeight);
+    return last?.ruckWeight ?? RUCK_DEFAULT_LBS;
+  })();
+  const [ruckWeight, setRuckWeight] = useState(String(lastRuck));
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [pausedDurations, setPausedDurations] = useState(0); // total ms paused
@@ -105,12 +123,14 @@ export default function Cardio({ data, saveData }) {
       date: new Date().toISOString(),
       duration: elapsed,
       distance: finalDistMi,
-      calories: Math.floor((elapsed / 60) * (CAL_PER_MIN[activityType] || 10)),
+      calories: Math.floor((elapsed / 60) * calPerMin(activityType, ruckWeight)),
       pace: paceFromPoints(tracker.points, 60, 'mi'),
       elevGainFt: Math.round(tracker.elevGainM * 3.2808),
       steps: stepCounter.steps,
       route: tracker.points.map(({ lat, lng, t }) => ({ lat, lng, t })),
       source,
+      // Save pack weight only on rucks — keeps non-ruck sessions clean.
+      ...(activityType === 'Ruck' ? { ruckWeight: parseFloat(ruckWeight) || RUCK_DEFAULT_LBS } : {}),
     };
     setLastSession(session);
     saveData({ ...data, workouts: [...(data.workouts || []), session] });
@@ -138,14 +158,17 @@ export default function Cardio({ data, saveData }) {
     return (
       <div style={st.screen}>
         <div style={st.activeHeader}>
-          <button style={st.backBtn} onClick={cancelSession}>✕</button>
-          <span style={st.activeTitle}>{activityType.toUpperCase()}</span>
+          <button style={st.backBtn} onClick={cancelSession} aria-label="Cancel session">✕</button>
+          <span style={st.activeTitle}>
+            {activityType.toUpperCase()}
+            {activityType === 'Ruck' && <span style={st.activeRuckTag}> · {ruckWeight} LB</span>}
+          </span>
           <div style={st.gpsIndicator}>
             <span style={{
-              width: 6, height: 6, borderRadius: '50%',
+              width: 8, height: 8, borderRadius: '50%',
               background: tracker.status === 'tracking' ? 'var(--accent)'
-                : tracker.status === 'requesting' ? '#d4ad6a'
-                : '#cc6666',
+                : tracker.status === 'requesting' ? 'var(--warn)'
+                : 'var(--error)',
               display: 'inline-block', marginRight: 6,
             }}/>
             <span style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
@@ -179,7 +202,7 @@ export default function Cardio({ data, saveData }) {
             { val: effectiveDistMi.toFixed(2), unit: usingSteps ? 'MI · STEP EST' : 'MI', label: 'DISTANCE' },
             { val: pace, unit: '/MI', label: 'PACE' },
             { val: stepCounter.steps || '--', unit: 'STEPS', label: 'STEP COUNT' },
-            { val: Math.floor((elapsed / 60) * (CAL_PER_MIN[activityType] || 10)), unit: 'CAL', label: 'CALORIES' },
+            { val: Math.floor((elapsed / 60) * calPerMin(activityType, ruckWeight)), unit: 'CAL', label: 'CALORIES' },
           ].map((s, i) => (
             <div key={i} style={st.statCell}>
               <div style={st.cellVal}>{s.val}</div>
@@ -209,7 +232,10 @@ export default function Cardio({ data, saveData }) {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
           <div style={st.summaryHero}>
-            <div style={st.summaryType}>{lastSession.type.toUpperCase()}</div>
+            <div style={st.summaryType}>
+              {lastSession.type.toUpperCase()}
+              {lastSession.ruckWeight && ` · ${lastSession.ruckWeight} LB`}
+            </div>
             <div style={st.summaryTime}>{fmtTime(lastSession.duration)}</div>
             <div style={st.summarySub}>
               {lastSession.distance.toFixed(2)} mi · {lastSession.pace} pace · {lastSession.calories} cal
@@ -247,7 +273,12 @@ export default function Cardio({ data, saveData }) {
     const m = Math.floor((sec % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
-  const typeColors = { Ruck:'#7a8c42', Run:'#4a8a6e', Walk:'#8a7a3e', Cardio:'#7a4a6e' };
+  const typeColors = {
+    Ruck:   'var(--type-ruck)',
+    Run:    'var(--type-run)',
+    Walk:   'var(--type-walk)',
+    Cardio: 'var(--type-cardio)',
+  };
 
   return (
     <div style={st.screen}>
@@ -264,13 +295,40 @@ export default function Cardio({ data, saveData }) {
               onClick={() => setActivityType(t)}
             >
               <div style={st.typeName}>{t.toUpperCase()}</div>
-              <div style={st.typeRate}>{CAL_PER_MIN[t]} cal/min</div>
+              <div style={st.typeRate}>
+                {Math.round(calPerMin(t, ruckWeight))} cal/min
+              </div>
             </button>
           ))}
         </div>
 
+        {activityType === 'Ruck' && (
+          <div style={st.ruckRow}>
+            <label style={st.ruckLabel}>PACK WEIGHT</label>
+            <div style={st.ruckInputWrap}>
+              <input
+                style={st.ruckInput}
+                type="number"
+                inputMode="decimal"
+                min={RUCK_MIN_LBS}
+                max="200"
+                step="1"
+                value={ruckWeight}
+                onChange={(e) => setRuckWeight(e.target.value)}
+                onBlur={() => {
+                  const n = parseFloat(ruckWeight);
+                  if (!Number.isFinite(n) || n < RUCK_MIN_LBS) setRuckWeight(String(RUCK_MIN_LBS));
+                }}
+              />
+              <span style={st.ruckUnit}>LB DRY</span>
+            </div>
+            <div style={st.ruckHint}>Min {RUCK_MIN_LBS} lb. ACFT-prep standard is 35 lb.</div>
+          </div>
+        )}
+
         <button style={st.startBtn} onClick={startSession}>
           ▸ START {activityType.toUpperCase()}
+          {activityType === 'Ruck' && ` · ${ruckWeight} LB`}
         </button>
 
         <button style={st.manualBtn} onClick={() => setMode('manual')}>
@@ -417,7 +475,7 @@ const st = {
   backBtn: { background:'none', border:'none', color:'var(--text)', fontSize:20, cursor:'pointer', width:32 },
   iconBtn: { background:'var(--accent)', border:'none', color:'var(--bg)', fontSize:11, letterSpacing:'0.1em', padding:'6px 14px', cursor:'pointer', borderRadius:3, fontFamily:'var(--font-head)', fontWeight:700 },
   gpsIndicator: { display:'flex', alignItems:'center' },
-  banner: { background:'rgba(180,80,40,0.12)', border:'1px solid rgba(180,80,40,0.3)', color:'#d4926a', fontSize:11, padding:'8px 14px', margin:'0 16px 8px', borderRadius:3, lineHeight:1.5 },
+  banner: { background:'rgba(212,173,106,0.12)', border:'1px solid rgba(212,173,106,0.3)', color:'var(--warn)', fontSize:11, padding:'8px 14px', margin:'0 16px 8px', borderRadius:3, lineHeight:1.5 },
   timerBlock: { textAlign:'center', padding:'18px 0 6px' },
   timerValue: { fontFamily:'var(--font-head)', fontSize:54, color:'var(--text)', fontWeight:800, letterSpacing:'0.04em', lineHeight:1 },
   timerLabel: { fontSize:10, letterSpacing:'0.16em', color:'var(--text-muted)', marginTop:2, fontWeight:600 },
@@ -435,6 +493,13 @@ const st = {
   typeCardActive: { background:'rgba(122,140,66,0.12)', borderColor:'var(--accent)' },
   typeName: { fontFamily:'var(--font-head)', fontSize:16, color:'var(--text)', fontWeight:700, letterSpacing:'0.08em' },
   typeRate: { fontSize:9, color:'var(--text-muted)', letterSpacing:'0.08em', marginTop:4 },
+  ruckRow: { background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:3, padding:'12px 14px', marginTop:10 },
+  ruckLabel: { display:'block', fontSize:9, letterSpacing:'0.14em', color:'var(--text-muted)', fontWeight:700, marginBottom:8 },
+  ruckInputWrap: { display:'flex', alignItems:'baseline', gap:10 },
+  ruckInput: { flex:1, height:48, background:'var(--surface-2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:24, padding:'0 14px', borderRadius:3, fontFamily:'var(--font-head)', fontWeight:700, outline:'none', boxSizing:'border-box', textAlign:'center' },
+  ruckUnit: { fontSize:11, color:'var(--text-muted)', letterSpacing:'0.12em', fontWeight:700 },
+  ruckHint: { fontSize:10, color:'var(--text-muted)', marginTop:6, lineHeight:1.4 },
+  activeRuckTag: { fontSize:11, color:'var(--accent)', letterSpacing:'0.1em', marginLeft:6, fontWeight:600 },
   startBtn: { width:'100%', height:54, background:'var(--accent)', border:'none', color:'var(--bg)', fontFamily:'var(--font-head)', fontSize:14, letterSpacing:'0.16em', cursor:'pointer', borderRadius:3, fontWeight:800, marginTop:20 },
   manualBtn: { width:'100%', height:44, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text-muted)', fontFamily:'var(--font-body)', fontSize:11, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, fontWeight:700, marginTop:8 },
   tip: { fontSize:11, color:'var(--text-muted)', lineHeight:1.5, marginTop:18, padding:'12px', background:'var(--surface-1)', border:'1px solid var(--border-subtle)', borderRadius:3 },

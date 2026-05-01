@@ -29,7 +29,12 @@ const Log = ({ data, saveData }) => {
     grouped[key].push(w);
   });
 
-  const typeColors = { Ruck:'#7a8c42', Run:'#4a8a6e', Walk:'#8a7a3e', Cardio:'#7a4a6e' };
+  const typeColors = {
+    Ruck:   'var(--type-ruck)',
+    Run:    'var(--type-run)',
+    Walk:   'var(--type-walk)',
+    Cardio: 'var(--type-cardio)',
+  };
 
   const onImport = (e) => {
     const file = e.target.files[0];
@@ -135,7 +140,7 @@ const st = {
   statItem: { textAlign:'center' },
   statVal: { fontFamily:'var(--font-head)', fontSize:14, color:'var(--text)', fontWeight:700 },
   statLbl: { fontSize:8, color:'var(--text-muted)', letterSpacing:'0.1em' },
-  delBtn: { background:'none', border:'none', color:'var(--text-muted)', fontSize:12, cursor:'pointer', padding:4, opacity:0.5 },
+  delBtn: { background:'none', border:'1px solid var(--border)', color:'var(--text-muted)', fontSize:12, cursor:'pointer', width:36, height:36, borderRadius:3, padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
   empty: { textAlign:'center', padding:'48px 0' },
   emptyIcon: { marginBottom:12, opacity:0.4 },
   emptyText: { fontSize:14, color:'var(--text-muted)', fontWeight:600, letterSpacing:'0.06em' },
