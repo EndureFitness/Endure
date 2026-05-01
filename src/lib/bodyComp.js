@@ -69,11 +69,12 @@ export function estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn }) {
 
 // ── Plan ──────────────────────────────────────────────────────────────────
 
-// Single calorie delta per goal (split the difference between the old
-// "moderate" and "aggressive" cuts → ~1.25 lb/wk fat loss for cut, +400 for
-// a lean bulk). Bulk also bumps protein 10% per the user's spec.
+// Single calorie delta per goal. Cut targets ~1.75 lb/wk fat loss (middle of
+// the 1.5–2 lb/wk band requested) — 875 kcal/day deficit, 3500 kcal per lb.
+// Floor at 1200 kcal/day prevents the deficit from going dangerously low for
+// smaller soldiers. Bulk bumps protein 10% per spec.
 const GOAL_CONFIG = {
-  cut:      { delta: -625, proteinPerLb: 1.0 },
+  cut:      { delta: -875, proteinPerLb: 1.0 },
   maintain: { delta:    0, proteinPerLb: 1.0 },
   bulk:     { delta:  400, proteinPerLb: 1.1 },
 };
@@ -115,7 +116,7 @@ export function calcPlan({
   const atTarget        = bf <= ARMY_TARGET_BF + 0.5;
   const fatToLoseLbs    = atTarget ? 0 : Math.max(0, parseFloat(((bf - ARMY_TARGET_BF) / 100 * weightLbs).toFixed(1)));
   const targetWeightLbs = atTarget ? weightLbs : parseFloat((weightLbs - fatToLoseLbs).toFixed(1));
-  const weeksToGoal     = Math.ceil(fatToLoseLbs / 1.25); // 1.25 lb/wk at -625 deficit
+  const weeksToGoal     = Math.ceil(fatToLoseLbs / 1.75); // ~1.75 lb/wk at -875 deficit
 
   const waterOz = Math.round(weightLbs * 0.55);
   const weeklyMiles = activityLevel === 'sedentary' ? 8
@@ -155,9 +156,9 @@ export function calcPlan({
 }
 
 export const GOALS = [
-  { id: 'cut',      label: 'CUT',      sub: '~1.25 lb/week fat loss',     delta: '-625 kcal' },
-  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',         delta: 'TDEE' },
-  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain',            delta: '+400 kcal' },
+  { id: 'cut',      label: 'CUT',      sub: '~1.5–2 lb/week fat loss', delta: '−875 kcal' },
+  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',     delta: 'TDEE' },
+  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain',        delta: '+400 kcal' },
 ];
 
 export function planToGoals(plan) {
