@@ -16,6 +16,7 @@ export default defineConfig({
         'icons/icon-192.png',
         'icons/icon-512.png',
         'icons/icon-maskable-512.png',
+        'og-image.png',
       ],
       manifest: {
         name: 'Endure',
