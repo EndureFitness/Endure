@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { usePWAInstall } from '../lib/install.js';
 import { wipeEverything } from '../lib/storage.js';
 import OfflineMaps from './OfflineMaps.jsx';
@@ -533,7 +533,9 @@ const Sleep = ({ data, onBack, saveData }) => {
 
   const hours = calcHours(bedTime, wakeTime);
   const pct = Math.min(hours / SLEEP_TARGET, 1);
-  const stats = computeSleepStats(sleep);
+  // Memoize — computeSleepStats does O(60) date lookups across `sleep`, only
+  // changes when `sleep` changes.
+  const stats = useMemo(() => computeSleepStats(sleep), [sleep]);
 
   const todayStr = new Date().toDateString();
   const isToday = selectedDate === todayStr;
@@ -565,7 +567,17 @@ const Sleep = ({ data, onBack, saveData }) => {
 
   const deleteEntry = (id) => {
     if (!confirm('Delete this sleep entry?')) return;
+    const deleted = sleep.find((s) => s.id === id);
     saveData({ ...data, sleep: sleep.filter((s) => s.id !== id) });
+    // If the deleted entry was the one currently loaded in the form, reset
+    // the form so a follow-up UPDATE doesn't silently re-create what was
+    // just deleted.
+    if (deleted && new Date(deleted.date).toDateString() === selectedDate) {
+      setBedTime('23:00');
+      setWakeTime('06:30');
+      setQuality('Good');
+      setNote('');
+    }
   };
 
   // Trend sparkline — last 14 days, target line at SLEEP_TARGET.

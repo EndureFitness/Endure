@@ -164,6 +164,26 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent) !important; }
 button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
+/* Suppress the browser's default white focus ring for mouse/touch clicks,    */
+/* but keep an accent outline for keyboard navigation (`:focus-visible`).     */
+/* Without this, every tap on a dark-themed button leaves a stark white ring. */
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus, select:focus, textarea:focus { outline: none; }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Globally style disabled controls so the unavailable state is obvious.      */
+/* Inline `cursor` declarations on the same element override this when        */
+/* needed; this is the safety net.                                            */
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* ── Leaflet overrides — dark theme + accent route ───────────────────── */
 .leaflet-container {
   background: #1a1c10;
