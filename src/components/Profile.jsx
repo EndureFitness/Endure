@@ -16,6 +16,17 @@ const BRANCHES = [
   'Quartermaster','Transportation','Ordnance','Cyber','Other',
 ];
 
+// Field MUST be defined at module scope. If declared inside Profile, every
+// render creates a new component identity, React unmounts and remounts every
+// child (including <input>), and the input loses focus on every keystroke —
+// classic "I can only type one character at a time" bug.
+const Field = ({ label, children }) => (
+  <div style={st.field}>
+    <label style={st.label}>{label}</label>
+    {children}
+  </div>
+);
+
 const Profile = ({ data, saveData, onReonboard }) => {
   const profile = data.profile || {};
   const [form, setForm] = useState({
@@ -37,13 +48,9 @@ const Profile = ({ data, saveData, onReonboard }) => {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const Field = ({ label, children }) => (
-    <div style={st.field}>
-      <label style={st.label}>{label}</label>
-      {children}
-    </div>
-  );
-
+  // Inline input element factory. NOT a component — it returns a JSX
+  // element that React reconciles in place. Safe to define here because
+  // the element type (`<input>`) is stable across renders.
   const inp = (key, props = {}) => (
     <input
       style={st.input}
