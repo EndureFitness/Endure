@@ -31,9 +31,12 @@ export default function Cardio({ data, saveData }) {
   const [mode, setMode] = useState('hub'); // hub | active | summary | manual
   const [activityType, setActivityType] = useState('Ruck');
   // Default to last-used ruck weight so soldiers don't re-enter it every time.
+  // Clamp to the dry-weight floor on load so any stale or imported entry
+  // can't seed the input below the minimum.
   const lastRuck = (() => {
     const last = [...(data.workouts || [])].reverse().find(w => w.type === 'Ruck' && w.ruckWeight);
-    return last?.ruckWeight ?? RUCK_DEFAULT_LBS;
+    const candidate = last?.ruckWeight ?? RUCK_DEFAULT_LBS;
+    return Math.max(RUCK_MIN_LBS, candidate);
   })();
   const [ruckWeight, setRuckWeight] = useState(String(lastRuck));
   const [running, setRunning] = useState(false);

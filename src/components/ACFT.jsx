@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ACFT_SCALES, scoreEvent, gradeTotal, EVENTS } from '../lib/acftScoring.js';
+import { ACFT_SCALES, scoreEvent, gradeTotal, EVENTS, EVENT_LABELS, orderedScoreKeys } from '../lib/acftScoring.js';
 
 const ScoreRing = ({ score, size = 56 }) => {
   const r = size / 2 - 6;
@@ -118,23 +118,26 @@ const ACFT = ({ data, saveData }) => {
         <div style={{ flex:1, overflowY:'auto', padding:'0 16px' }}>
           {aftHistory.length === 0 && <div style={st.empty}>No AFT tests logged yet.</div>}
           {[...aftHistory].reverse().map(entry => {
-            const { pass } = gradeTotal(entry.scores);
+            const { pass, maxTotal } = gradeTotal(entry.scores);
+            // Iterate the actual scores object (not EVENTS) so a legacy
+            // 6-event entry still renders its SPT score in the breakdown.
+            const eventKeys = orderedScoreKeys(entry.scores);
             return (
               <div key={entry.id} style={st.histCard}>
                 <div style={st.histCardHeader}>
                   <span style={st.histDate}>{new Date(entry.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</span>
-                  <span style={{ ...st.histBadge, background: pass ? 'rgba(122,140,66,0.15)' : 'rgba(180,60,60,0.15)', color: pass ? 'var(--accent)' : '#cc6666', border:`1px solid ${pass ? 'rgba(122,140,66,0.3)' : 'rgba(180,60,60,0.3)'}` }}>
+                  <span style={{ ...st.histBadge, background: pass ? 'rgba(122,140,66,0.15)' : 'rgba(180,60,60,0.15)', color: pass ? 'var(--accent)' : 'var(--error)', border:`1px solid ${pass ? 'rgba(122,140,66,0.3)' : 'rgba(180,60,60,0.3)'}` }}>
                     {pass ? 'PASS' : 'FAIL'}
                   </span>
-                  <span style={st.histTotal}>{entry.total} pts</span>
+                  <span style={st.histTotal}>{entry.total}<span style={st.histTotalMax}>/{maxTotal}</span></span>
                 </div>
                 <div style={st.histEventsRow}>
-                  {EVENTS.map(ev => (
-                    <div key={ev.key} style={st.histEventCell}>
-                      <div style={{ ...st.histEventScore, color: (entry.scores[ev.key] || 0) >= 60 ? 'var(--text)' : '#cc5555' }}>
-                        {entry.scores[ev.key] ?? '--'}
+                  {eventKeys.map(key => (
+                    <div key={key} style={st.histEventCell}>
+                      <div style={{ ...st.histEventScore, color: (entry.scores[key] || 0) >= 60 ? 'var(--text)' : 'var(--error)' }}>
+                        {entry.scores[key] ?? '--'}
                       </div>
-                      <div style={st.histEventKey}>{ev.key}</div>
+                      <div style={st.histEventKey}>{EVENT_LABELS[key]?.abbr || key}</div>
                     </div>
                   ))}
                 </div>
@@ -183,19 +186,22 @@ const ACFT = ({ data, saveData }) => {
         </div>
 
         <div style={st.sectionLabel}>EVENT SCORES</div>
-        {EVENTS.map(ev => {
-          const score = latestScores ? latestScores[ev.key] : null;
-          const raw = latest?.raw?.[ev.key];
-          const rawDisplay = ev.key === 'TMR'
+        {/* Iterate the latest entry's scored keys (not EVENTS) so a legacy   */}
+        {/* 6-event entry still surfaces its SPT row alongside the 5 current. */}
+        {(latestScores ? orderedScoreKeys(latestScores) : EVENTS.map(e => e.key)).map(key => {
+          const meta = EVENT_LABELS[key] || { label: key, unit: '' };
+          const score = latestScores ? latestScores[key] : null;
+          const raw = latest?.raw?.[key];
+          const rawDisplay = key === 'TMR'
             ? (latest?.raw?.TMR_m ? `${latest.raw.TMR_m}:${String(latest.raw.TMR_s || 0).padStart(2,'0')}` : '--')
             : (raw || '--');
           const barPct = score ? Math.min(score / 100, 1) : 0;
-          const barColor = score >= 90 ? 'var(--accent)' : score >= 70 ? '#8a9a4a' : score >= 60 ? '#8a7a3e' : '#8a3a3e';
+          const barColor = score >= 90 ? 'var(--accent)' : score >= 70 ? '#8a9a4a' : score >= 60 ? '#8a7a3e' : 'var(--error)';
           return (
-            <div key={ev.key} style={st.eventRow}>
+            <div key={key} style={st.eventRow}>
               <div style={st.eventLeft}>
-                <div style={st.eventName}>{ev.label}</div>
-                <div style={st.eventRaw}>{rawDisplay} {ev.unit}</div>
+                <div style={st.eventName}>{meta.label}</div>
+                <div style={st.eventRaw}>{rawDisplay} {meta.unit}</div>
                 <div style={st.eventBar}>
                   <div style={{ ...st.eventBarFill, width:`${barPct*100}%`, background:barColor }}></div>
                 </div>
@@ -289,6 +295,7 @@ const st = {
   histDate: { fontSize:12, color:'var(--text-muted)', flex:1 },
   histBadge: { fontSize:9, letterSpacing:'0.1em', padding:'2px 8px', borderRadius:2, fontWeight:700 },
   histTotal: { fontFamily:'var(--font-head)', fontSize:20, color:'var(--text)', fontWeight:700 },
+  histTotalMax: { fontSize:11, color:'var(--text-muted)', fontWeight:500, marginLeft:1 },
   histEventsRow: { display:'flex', gap:4 },
   histEventCell: { flex:1, textAlign:'center' },
   histEventScore: { fontFamily:'var(--font-head)', fontSize:16, fontWeight:700 },

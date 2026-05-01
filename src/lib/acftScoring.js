@@ -68,7 +68,8 @@ export function gradeTotal(scores) {
 }
 
 // Current AFT events (5). SPT (Standing Power Throw) was retired in the 2025
-// update; legacy entries that include an SPT score still render in history.
+// update; legacy entries that include an SPT score still render in history
+// via EVENT_LABELS below.
 export const EVENTS = [
   { key: 'MDL', label: '3-Rep Max Deadlift',    unit: 'lbs',  inputType: 'number',     placeholder: 'e.g. 280', icon: 'MDL' },
   { key: 'HRP', label: 'Hand-Release Push-Ups', unit: 'reps', inputType: 'number',     placeholder: 'e.g. 42',  icon: 'HRP' },
@@ -76,3 +77,24 @@ export const EVENTS = [
   { key: 'PLK', label: 'Plank',                 unit: 'sec',  inputType: 'number',     placeholder: 'e.g. 180', icon: 'PLK' },
   { key: 'TMR', label: '2-Mile Run',            unit: '',     inputType: 'time-input', placeholder: 'MM:SS total', icon: '2MR' },
 ];
+
+// Display labels for all event keys ever used, including retired SPT. The
+// history view iterates over the entry's actual scores object (not EVENTS)
+// and looks up labels here so legacy 6-event entries still render their SPT
+// score with the correct abbreviation and full label.
+export const EVENT_LABELS = {
+  MDL: { abbr: 'MDL', label: '3-Rep Max Deadlift',    unit: 'lbs'  },
+  SPT: { abbr: 'SPT', label: 'Standing Power Throw',  unit: 'm×10' },
+  HRP: { abbr: 'HRP', label: 'Hand-Release Push-Ups', unit: 'reps' },
+  SDC: { abbr: 'SDC', label: 'Sprint-Drag-Carry',     unit: 'sec'  },
+  PLK: { abbr: 'PLK', label: 'Plank',                 unit: 'sec'  },
+  TMR: { abbr: '2MR', label: '2-Mile Run',            unit: ''     },
+};
+
+// Canonical render order so history displays MDL first, TMR last,
+// regardless of object-key iteration order.
+const EVENT_ORDER = ['MDL', 'SPT', 'HRP', 'SDC', 'PLK', 'TMR'];
+
+export function orderedScoreKeys(scores) {
+  return EVENT_ORDER.filter((k) => k in scores);
+}
