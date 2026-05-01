@@ -12,9 +12,8 @@ const ruckCalPerMin = (packLbs) => 7 + 0.07 * (Number(packLbs) || 30);
 const calPerMin = (type, packLbs) =>
   type === 'Ruck' ? ruckCalPerMin(packLbs) : (CAL_PER_MIN[type] || 10);
 
-// AR 670-1 spec for ACFT-prep rucks is 35 lb dry minimum; FORSCOM standard
-// loaded ruck is 35 lb. Some training plans use 20 lb for entry-level. Floor
-// here is 20 lb dry to enforce a sensible minimum.
+// AR 670-1 / FORSCOM standard loaded ruck is 35 lb dry; entry-level training
+// plans use 20 lb. Floor here is 20 lb dry to enforce a sensible minimum.
 const RUCK_MIN_LBS = 20;
 const RUCK_DEFAULT_LBS = 35;
 
@@ -322,7 +321,7 @@ export default function Cardio({ data, saveData }) {
               />
               <span style={st.ruckUnit}>LB DRY</span>
             </div>
-            <div style={st.ruckHint}>Min {RUCK_MIN_LBS} lb. ACFT-prep standard is 35 lb.</div>
+            <div style={st.ruckHint}>Min {RUCK_MIN_LBS} lb. AFT-prep standard is 35 lb.</div>
           </div>
         )}
 

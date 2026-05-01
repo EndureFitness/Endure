@@ -1,6 +1,6 @@
 # Endure
 
-Privacy-first fitness tracker built for soldiers. Track rucks, runs, walks, ACFT scores, nutrition, weight, hydration, and sleep — without accounts, ads, or data collection.
+Privacy-first fitness tracker built for soldiers. Track rucks, runs, walks, AFT scores, nutrition, weight, hydration, and sleep — without accounts, ads, or data collection.
 
 **Live:** https://endurefitness.github.io/Endure/
 
@@ -13,7 +13,7 @@ Privacy-first fitness tracker built for soldiers. Track rucks, runs, walks, ACFT
 - **Cardio tracking** with real GPS, live route on a dark themed map, distance / pace / elevation captured per session. Wake Lock keeps the screen alive while you train.
 - **Offline map tiles** — pre-download a 1–10 mi radius around any location so the map renders with zero signal at remote training sites or on airplane mode.
 - **Step counter fallback** when GPS is unreliable (indoor track, dense canopy, signal loss). Activity-tuned peak detection, debounced to reject double-counts.
-- **ACFT scoring** for all six events (3RM Deadlift, Standing Power Throw, Hand-Release Push-Ups, Sprint-Drag-Carry, Plank, 2-Mile Run) against FM 7-22 representative brackets. Live point preview as you enter raw scores.
+- **AFT scoring** for all five events (3RM Deadlift, Hand-Release Push-Ups, Sprint-Drag-Carry, Plank, 2-Mile Run) against FM 7-22 representative brackets. Live point preview as you enter raw scores. Standing Power Throw was retired in the 2025 ACFT → AFT update; legacy entries with SPT still render correctly in history.
 - **Mission-brief intake** that generates a personalized plan in 9 steps: BMR (Mifflin-St Jeor), TDEE, calorie target, and macros for your selected goal (Cut / Maintain / Bulk).
 - **AR 600-9 body comp reference** — Height-to-Abdomen Ratio is the primary indicator with the 0.55 Army standard marked. RFM body-fat estimate as a secondary informational number. Calorie math does not depend on either.
 - **Nutrition log** with macro targets that match your plan, custom foods, daily date navigation, meal grouping.

@@ -24,11 +24,11 @@ const ScoreRing = ({ score, size = 56 }) => {
 
 const ACFT = ({ data, saveData }) => {
   const [view, setView] = useState('current');
-  const [form, setForm] = useState({ MDL:'', SPT:'', HRP:'', SDC:'', PLK:'', TMR_m:'', TMR_s:'' });
+  const [form, setForm] = useState({ MDL:'', HRP:'', SDC:'', PLK:'', TMR_m:'', TMR_s:'' });
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
 
-  const acftHistory = data.acft || [];
-  const latest = acftHistory.length ? acftHistory[acftHistory.length - 1] : null;
+  const aftHistory = data.aft || data.acft || []; // 'data.acft' kept for legacy storage
+  const latest = aftHistory.length ? aftHistory[aftHistory.length - 1] : null;
 
   const scoreEntry = (raw) => {
     const scores = {};
@@ -42,15 +42,18 @@ const ACFT = ({ data, saveData }) => {
   };
 
   const latestScores = latest ? latest.scores : null;
-  const { total: latestTotal, pass: isPassing } = latestScores ? gradeTotal(latestScores) : { total: null, pass: null };
+  const { total: latestTotal, pass: isPassing, maxTotal: latestMax } =
+    latestScores ? gradeTotal(latestScores) : { total: null, pass: null, maxTotal: 500 };
 
   const saveEntry = () => {
     const scores = scoreEntry(form);
     const { total } = gradeTotal(scores);
     const entry = { id: Date.now(), date: entryDate, raw: { ...form }, scores, total };
-    saveData({ ...data, acft: [...acftHistory, entry] });
+    // Storage key remains 'acft' for backwards-compatibility with existing
+    // installs; the UI is the only thing renamed.
+    saveData({ ...data, acft: [...aftHistory, entry] });
     setView('current');
-    setForm({ MDL:'', SPT:'', HRP:'', SDC:'', PLK:'', TMR_m:'', TMR_s:'' });
+    setForm({ MDL:'', HRP:'', SDC:'', PLK:'', TMR_m:'', TMR_s:'' });
   };
 
   if (view === 'entry') {
@@ -58,7 +61,7 @@ const ACFT = ({ data, saveData }) => {
       <div style={st.screen}>
         <div style={st.header}>
           <button style={st.backBtn} onClick={() => setView('current')}>←</button>
-          <span style={st.headerTitle}>LOG ACFT</span>
+          <span style={st.headerTitle}>LOG AFT</span>
           <div style={{ width:32 }}></div>
         </div>
         <div style={{ flex:1, overflowY:'auto', padding:'0 16px 24px' }}>
@@ -109,12 +112,12 @@ const ACFT = ({ data, saveData }) => {
       <div style={st.screen}>
         <div style={st.header}>
           <button style={st.backBtn} onClick={() => setView('current')}>←</button>
-          <span style={st.headerTitle}>ACFT HISTORY</span>
+          <span style={st.headerTitle}>AFT HISTORY</span>
           <div style={{ width:32 }}></div>
         </div>
         <div style={{ flex:1, overflowY:'auto', padding:'0 16px' }}>
-          {acftHistory.length === 0 && <div style={st.empty}>No ACFT tests logged yet.</div>}
-          {[...acftHistory].reverse().map(entry => {
+          {aftHistory.length === 0 && <div style={st.empty}>No AFT tests logged yet.</div>}
+          {[...aftHistory].reverse().map(entry => {
             const { pass } = gradeTotal(entry.scores);
             return (
               <div key={entry.id} style={st.histCard}>
@@ -146,7 +149,7 @@ const ACFT = ({ data, saveData }) => {
   return (
     <div style={st.screen}>
       <div style={st.header}>
-        <span style={st.headerTitle}>ACFT</span>
+        <span style={st.headerTitle}>AFT</span>
         <div style={{ display:'flex', gap:8 }}>
           <button style={st.iconBtn} onClick={() => setView('log')}>HISTORY</button>
           <button style={st.logNewBtn} onClick={() => setView('entry')}>+ LOG</button>
@@ -157,7 +160,7 @@ const ACFT = ({ data, saveData }) => {
         <div style={st.scoreHero}>
           <div>
             <div style={st.scoreBig}>{latestTotal ?? '--'}</div>
-            <div style={st.scoreMax}>/600</div>
+            <div style={st.scoreMax}>/{latestMax}</div>
             <div style={st.scoreLabel}>TOTAL SCORE</div>
             {latestTotal !== null && (
               <div style={{ ...st.passBadge, background: isPassing ? 'rgba(122,140,66,0.12)' : 'rgba(180,60,60,0.12)', color: isPassing ? 'var(--accent)' : '#cc6666', borderColor: isPassing ? 'rgba(122,140,66,0.3)' : 'rgba(180,60,60,0.3)' }}>
@@ -202,12 +205,12 @@ const ACFT = ({ data, saveData }) => {
           );
         })}
 
-        {acftHistory.length > 1 && (
+        {aftHistory.length > 1 && (
           <>
             <div style={st.sectionLabel}>SCORE TREND</div>
             <div style={st.trendCard}>
               {(() => {
-                const pts = acftHistory.map(e => e.total);
+                const pts = aftHistory.map(e => e.total);
                 const min = Math.min(...pts) - 10;
                 const max = Math.max(...pts) + 10;
                 const W = 280, H = 60;
@@ -239,7 +242,7 @@ const ACFT = ({ data, saveData }) => {
         )}
 
         {!latestTotal && (
-          <button style={st.startBtn} onClick={() => setView('entry')}>LOG YOUR FIRST ACFT</button>
+          <button style={st.startBtn} onClick={() => setView('entry')}>LOG YOUR FIRST AFT</button>
         )}
       </div>
     </div>

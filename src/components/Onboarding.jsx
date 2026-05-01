@@ -209,7 +209,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           <div style={st.step}>
             <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
             <div style={st.stepTitle}>AGE</div>
-            <div style={st.stepSub}>Used to calculate basal metabolic rate and ACFT age brackets.</div>
+            <div style={st.stepSub}>Used to calculate basal metabolic rate and AFT age brackets.</div>
             <div style={st.bigInputWrap}>
               <input style={st.bigInput} type="number" inputMode="numeric" placeholder="25" min="17" max="65"
                 value={profile.age} onChange={(e) => set('age', e.target.value)} />

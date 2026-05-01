@@ -24,11 +24,12 @@ const Dashboard = ({ data, setScreen }) => {
   const prevWeight = weights.length > 1 ? weights[weights.length - 2].weight : null;
   const weightDelta = latestWeight && prevWeight ? (latestWeight - prevWeight).toFixed(1) : null;
 
-  const acftHistory = data.acft || [];
-  const latestACFT = acftHistory.length ? acftHistory[acftHistory.length - 1] : null;
-  const prevACFT = acftHistory.length > 1 ? acftHistory[acftHistory.length - 2] : null;
-  const acftDelta = latestACFT && prevACFT ? latestACFT.total - prevACFT.total : null;
-  const acftPass = latestACFT ? gradeTotal(latestACFT.scores).pass : null;
+  const aftHistory = data.acft || []; // storage key 'acft' kept for legacy data
+  const latestAFT = aftHistory.length ? aftHistory[aftHistory.length - 1] : null;
+  const prevAFT = aftHistory.length > 1 ? aftHistory[aftHistory.length - 2] : null;
+  const aftDelta = latestAFT && prevAFT ? latestAFT.total - prevAFT.total : null;
+  const aftPass = latestAFT ? gradeTotal(latestAFT.scores).pass : null;
+  const aftMax = latestAFT ? gradeTotal(latestAFT.scores).maxTotal : 500;
 
   const profile = data.profile || {};
 
@@ -119,24 +120,24 @@ const Dashboard = ({ data, setScreen }) => {
 
       <div style={{...st.section, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'}} onClick={() => setScreen('acft')}>
         <div>
-          <div style={st.sectionLabel}>LATEST ACFT</div>
-          {latestACFT ? (
+          <div style={st.sectionLabel}>LATEST AFT</div>
+          {latestAFT ? (
             <>
               <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
-                <span style={{ fontFamily:'var(--font-head)', fontSize:36, fontWeight:800, color:'var(--text)', lineHeight:1 }}>{latestACFT.total}</span>
-                <span style={{ fontSize:12, color:'var(--text-muted)' }}>/600</span>
-                {acftDelta !== null && (
-                  <span style={{ fontSize:11, color: acftDelta >= 0 ? 'var(--accent)' : '#cc6666', fontWeight:700 }}>
-                    {acftDelta > 0 ? '+' : ''}{acftDelta}
+                <span style={{ fontFamily:'var(--font-head)', fontSize:36, fontWeight:800, color:'var(--text)', lineHeight:1 }}>{latestAFT.total}</span>
+                <span style={{ fontSize:12, color:'var(--text-muted)' }}>/{aftMax}</span>
+                {aftDelta !== null && (
+                  <span style={{ fontSize:11, color: aftDelta >= 0 ? 'var(--accent)' : 'var(--error)', fontWeight:700 }}>
+                    {aftDelta > 0 ? '+' : ''}{aftDelta}
                   </span>
                 )}
               </div>
               <div style={{ ...st.sectionLabel, marginTop:4, marginBottom:0 }}>
-                <span style={{ color: acftPass ? 'var(--accent)' : '#cc6666' }}>
-                  {acftPass ? '✓ PASSING' : '✗ BELOW STANDARD'}
+                <span style={{ color: aftPass ? 'var(--accent)' : 'var(--error)' }}>
+                  {aftPass ? '✓ PASSING' : '✗ BELOW STANDARD'}
                 </span>
                 <span style={{ color:'var(--text-muted)', marginLeft:8 }}>
-                  {new Date(latestACFT.date).toLocaleDateString('en-US', { month:'short', day:'numeric' })}
+                  {new Date(latestAFT.date).toLocaleDateString('en-US', { month:'short', day:'numeric' })}
                 </span>
               </div>
             </>
@@ -145,16 +146,16 @@ const Dashboard = ({ data, setScreen }) => {
           )}
         </div>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
-          {latestACFT && Object.entries(latestACFT.scores).map(([key, score]) => (
+          {latestAFT && Object.entries(latestAFT.scores).map(([key, score]) => (
             <div key={key} style={{ display:'flex', alignItems:'center', gap:5 }}>
               <span style={{ fontSize:8, color:'var(--text-muted)', width:26, letterSpacing:'0.06em' }}>{key}</span>
               <div style={{ width:48, height:3, background:'var(--surface-2)', borderRadius:2, overflow:'hidden' }}>
-                <div style={{ width:`${Math.min((score||0),100)}%`, height:'100%', background: score >= 90 ? 'var(--accent)' : score >= 70 ? '#8a9a4a' : score >= 60 ? '#8a7a3e' : '#8a3a3e', borderRadius:2 }}></div>
+                <div style={{ width:`${Math.min((score||0),100)}%`, height:'100%', background: score >= 90 ? 'var(--accent)' : score >= 70 ? '#8a9a4a' : score >= 60 ? '#8a7a3e' : 'var(--error)', borderRadius:2 }}></div>
               </div>
               <span style={{ fontSize:9, color:'var(--text-dim)', width:22, textAlign:'right', fontFamily:'var(--font-head)', fontWeight:700 }}>{score ?? '--'}</span>
             </div>
           ))}
-          {!latestACFT && (
+          {!latestAFT && (
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" opacity="0.4">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
             </svg>

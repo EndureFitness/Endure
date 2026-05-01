@@ -88,7 +88,7 @@
   --text:         #e4e2d6;
   --text-dim:     #b0ae9e;
   --text-muted:   #6a6d5a;
-  /* Status colors — used for GPS, validation, ACFT pass/fail */
+  /* Status colors — used for GPS, validation, AFT pass/fail */
   --error:        #cc6666;
   --warn:         #d4ad6a;
   --success:      #7a8c42; /* alias of --accent */
