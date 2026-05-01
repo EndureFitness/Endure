@@ -69,10 +69,20 @@ export function estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn }) {
 
 // ── Plan ──────────────────────────────────────────────────────────────────
 
+// Single calorie delta per goal (split the difference between the old
+// "moderate" and "aggressive" cuts → ~1.25 lb/wk fat loss for cut, +400 for
+// a lean bulk). Bulk also bumps protein 10% per the user's spec.
+const GOAL_CONFIG = {
+  cut:      { delta: -625, proteinPerLb: 1.0 },
+  maintain: { delta:    0, proteinPerLb: 1.0 },
+  bulk:     { delta:  400, proteinPerLb: 1.1 },
+};
+
 export function calcPlan({
   weightLbs, heightIn, age, gender,
   waistIn,                      // reference only — does not affect cals/macros
   activityLevel,
+  goal = 'cut',
 }) {
   const weightKg = weightLbs * 0.453592;
   const heightCm = heightIn * 2.54;
@@ -84,35 +94,28 @@ export function calcPlan({
 
   const tdee = Math.round(bmr * (ACTIVITY_MULTIPLIERS[activityLevel] || 1.45));
 
-  // Three calorie options. CUT is the saved goal unless the user is
-  // already at/below the Army BF standard, in which case we recommend
-  // MAINTAIN instead.
-  const maintenanceCals = tdee;
-  const fatLossCals     = Math.max(1200, tdee - 500);
-  const aggressiveCals  = Math.max(1200, tdee - 750);
+  const cfg = GOAL_CONFIG[goal] || GOAL_CONFIG.cut;
+  const goalCals = Math.max(1200, tdee + cfg.delta);
+
+  // Protein straight from bodyweight, multiplier varies by goal.
+  const proteinG    = Math.round(weightLbs * cfg.proteinPerLb);
+  // 25% of total cals from fat — minimum for hormonal health.
+  const fatG        = Math.round((goalCals * 0.25) / 9);
+  const proteinCals = proteinG * 4;
+  const fatCals     = fatG * 9;
+  const carbCals    = Math.max(0, goalCals - proteinCals - fatCals);
+  const carbG       = Math.round(carbCals / 4);
 
   // Body comp reference — does NOT influence the math above.
   const hrs = calcHRS(waistIn, heightIn);
   const { bf, method } = estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn });
   const overStandard = hrs != null && hrs > HRS_STANDARD;
-  const alreadyLean  = waistIn ? hrs != null && hrs <= 0.49 : bf <= ARMY_TARGET_BF + 0.5;
-  const goalCals     = alreadyLean ? maintenanceCals : fatLossCals;
 
-  // Macros — protein straight from bodyweight, no LBM detour.
-  // 1g/lb is a high-end fat-loss target that protects muscle in a deficit.
-  const proteinG    = Math.round(weightLbs * 1.0);
-  const proteinCals = proteinG * 4;
-  const remainingCals = Math.max(0, goalCals - proteinCals);
-  // 25% of total cals from fat — minimum for hormonal health, with the rest as carbs.
-  const fatG  = Math.round((goalCals * 0.25) / 9);
-  const fatCals = fatG * 9;
-  const carbCals = Math.max(0, goalCals - proteinCals - fatCals);
-  const carbG = Math.round(carbCals / 4);
-
-  // Fat-to-lose estimate — informational, derived from BF reference.
-  const fatToLoseLbs = alreadyLean ? 0 : Math.max(0, parseFloat(((bf - ARMY_TARGET_BF) / 100 * weightLbs).toFixed(1)));
-  const targetWeightLbs = alreadyLean ? weightLbs : parseFloat((weightLbs - fatToLoseLbs).toFixed(1));
-  const weeksToGoal = Math.ceil(fatToLoseLbs);
+  // Fat-to-lose estimate — informational only (uses BF for the projection).
+  const atTarget        = bf <= ARMY_TARGET_BF + 0.5;
+  const fatToLoseLbs    = atTarget ? 0 : Math.max(0, parseFloat(((bf - ARMY_TARGET_BF) / 100 * weightLbs).toFixed(1)));
+  const targetWeightLbs = atTarget ? weightLbs : parseFloat((weightLbs - fatToLoseLbs).toFixed(1));
+  const weeksToGoal     = Math.ceil(fatToLoseLbs / 1.25); // 1.25 lb/wk at -625 deficit
 
   const waterOz = Math.round(weightLbs * 0.55);
   const weeklyMiles = activityLevel === 'sedentary' ? 8
@@ -129,7 +132,7 @@ export function calcPlan({
     hrsCategory: hrsCategory(hrs),
     overStandard,
     targetBF: ARMY_TARGET_BF,
-    alreadyLean,
+    atTarget,
     fatToLoseLbs,
     targetWeightLbs,
     weeksToGoal,
@@ -137,9 +140,7 @@ export function calcPlan({
     // Energy
     bmr: Math.round(bmr),
     tdee,
-    maintenanceCals,
-    fatLossCals,
-    aggressiveCals,
+    goal,
     goalCals,
 
     // Macros
@@ -152,6 +153,12 @@ export function calcPlan({
     weeklyMiles,
   };
 }
+
+export const GOALS = [
+  { id: 'cut',      label: 'CUT',      sub: '~1.25 lb/week fat loss',     delta: '-625 kcal' },
+  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',         delta: 'TDEE' },
+  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain',            delta: '+400 kcal' },
+];
 
 export function planToGoals(plan) {
   return {

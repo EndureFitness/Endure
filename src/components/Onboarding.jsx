@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
-import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS } from '../lib/bodyComp.js';
+import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS, GOALS } from '../lib/bodyComp.js';
 
 // AR 600-9 (2023+) uses a single waist measurement for both genders. No
 // neck or hip step. Calorie math is independent of waist; waist drives only
-// the HRS body-comp reference.
-const STEPS = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','ACTIVITY','GENERATING','PLAN'];
+// the HRS body-comp reference. GOAL step is final gate before plan generation.
+const STEPS = ['WELCOME','RANK','GENDER','AGE','HEIGHT','WEIGHT','WAIST','ACTIVITY','GOAL','GENERATING','PLAN'];
 
 export default function Onboarding({ onComplete, existingProfile = {} }) {
   const [step, setStep] = useState(0);
@@ -23,6 +23,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
     weight: existingProfile?.weight ? String(existingProfile.weight) : '',
     waist: existingProfile?.waist ? String(existingProfile.waist) : '',
     activityLevel: existingProfile?.activityLevel || 'moderate',
+    goal: existingProfile?.goal || '',
     name: existingProfile?.name || '',
     unit: existingProfile?.unit || '',
     mos: existingProfile?.mos || '',
@@ -43,6 +44,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           gender: profile.gender,
           waistIn: profile.waist ? parseFloat(profile.waist) : null,
           activityLevel: profile.activityLevel,
+          goal: profile.goal || 'cut',
         });
         setPlan(p);
         setStep((s) => s + 1);
@@ -69,6 +71,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
         weight: profile.weight,
         waist: profile.waist,
         activityLevel: profile.activityLevel,
+        goal: profile.goal,
         name: profile.name,
         unit: profile.unit,
         mos: profile.mos,
@@ -285,6 +288,29 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           </div>
         )}
 
+        {currentStep === 'GOAL' && (
+          <div style={st.step}>
+            <div style={st.stepTag}>STEP {step} / {STEPS.length - 3}</div>
+            <div style={st.stepTitle}>SELECT MISSION</div>
+            <div style={st.stepSub}>What are you training for? This sets your daily calorie target relative to maintenance.</div>
+            <div style={st.activityList}>
+              {GOALS.map((g) => (
+                <button key={g.id}
+                  style={{ ...st.activityBtn, ...(profile.goal === g.id ? st.activityBtnActive : {}) }}
+                  onClick={() => { set('goal', g.id); setTimeout(advance, 250); }}
+                >
+                  <div style={st.activityLabel}>
+                    {g.label}
+                    <span style={st.goalDelta}>{g.delta}</span>
+                  </div>
+                  <div style={st.activitySub}>{g.sub}</div>
+                  {profile.goal === g.id && <span style={st.activityCheck}>✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {currentStep === 'GENERATING' && (
           <div style={st.step}>
             <div style={st.generatingWrap}>
@@ -356,19 +382,19 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                   <span style={st.bfStatLbl}>FAT TO LOSE</span>
                 </div>
                 <div style={st.bfStat}>
-                  <span style={st.bfStatVal}>{plan.alreadyLean ? 'AT TARGET' : plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : '—'}</span>
+                  <span style={st.bfStatVal}>{plan.atTarget ? 'AT TARGET' : plan.weeksToGoal > 0 ? `~${plan.weeksToGoal}wk` : '—'}</span>
                   <span style={st.bfStatLbl}>ETA</span>
                 </div>
               </div>
             </div>
 
             <div style={st.planCard}>
-              <div style={st.planCardLabel}>DAILY NUTRITION · {plan.alreadyLean ? 'MAINTAIN' : 'FAT LOSS'}</div>
+              <div style={st.planCardLabel}>DAILY NUTRITION · {plan.goal.toUpperCase()}</div>
               <div style={st.nutritionGrid}>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.goalCals}</div>
                   <div style={st.nutriUnit}>KCAL</div>
-                  <div style={st.nutriLbl}>{plan.alreadyLean ? 'MAINTENANCE' : 'CUT'}</div>
+                  <div style={st.nutriLbl}>TARGET</div>
                 </div>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.protein}g</div>
@@ -386,24 +412,8 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                   <div style={st.nutriLbl}>{plan.fat * 9} KCAL</div>
                 </div>
               </div>
-              {!plan.alreadyLean && (
-                <div style={st.calorieOptions}>
-                  <div style={st.calOpt}>
-                    <span style={st.calOptVal}>{plan.maintenanceCals.toLocaleString()}</span>
-                    <span style={st.calOptLbl}>MAINTAIN</span>
-                  </div>
-                  <div style={{ ...st.calOpt, background:'rgba(122,140,66,0.12)', borderColor:'var(--accent)' }}>
-                    <span style={{ ...st.calOptVal, color:'var(--accent)' }}>{plan.fatLossCals.toLocaleString()}</span>
-                    <span style={st.calOptLbl}>CUT (-500)</span>
-                  </div>
-                  <div style={st.calOpt}>
-                    <span style={st.calOptVal}>{plan.aggressiveCals.toLocaleString()}</span>
-                    <span style={st.calOptLbl}>AGGRESSIVE (-750)</span>
-                  </div>
-                </div>
-              )}
               <div style={st.maintenanceNote}>
-                BMR {plan.bmr.toLocaleString()} kcal · TDEE {plan.tdee.toLocaleString()} kcal · LBM {plan.leanMassLbs} lbs
+                BMR {plan.bmr.toLocaleString()} · TDEE {plan.tdee.toLocaleString()} · {plan.goal === 'cut' ? `−${plan.tdee - plan.goalCals}` : plan.goal === 'bulk' ? `+${plan.goalCals - plan.tdee}` : 'AT TDEE'} kcal
               </div>
             </div>
 
@@ -515,10 +525,7 @@ const st = {
   hrsBarFill: { height:'100%', borderRadius:3, transition:'width 0.5s ease' },
   hrsBarMark: { position:'absolute', top:-3, bottom:-3, width:2, background:'var(--accent)', borderRadius:1 },
   hrsLegend: { display:'flex', justifyContent:'space-between', fontSize:8, color:'var(--text-muted)', letterSpacing:'0.08em', marginTop:5 },
-  calorieOptions: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginTop:10, marginBottom:8 },
-  calOpt: { background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:3, padding:'6px 4px', textAlign:'center' },
-  calOptVal: { display:'block', fontFamily:'var(--font-head)', fontSize:14, color:'var(--text-dim)', fontWeight:700, lineHeight:1 },
-  calOptLbl: { fontSize:7, color:'var(--text-muted)', letterSpacing:'0.08em', marginTop:3, display:'block' },
+  goalDelta: { fontSize:9, color:'var(--accent)', letterSpacing:'0.08em', marginLeft:8, fontWeight:600, fontFamily:'var(--font-body)' },
 
   bfRow: { display:'flex', alignItems:'center', justifyContent:'center', gap:20, marginBottom:12 },
   bfCenter: { textAlign:'center' },
