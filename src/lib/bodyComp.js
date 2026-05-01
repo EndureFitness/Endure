@@ -2,20 +2,29 @@
 //
 // Two things are calculated, independently:
 //
-// 1. Calorie + macro targets — driven ONLY by Mifflin-St Jeor BMR,
-//    activity multiplier, and bodyweight. Waist circumference does NOT
-//    enter this path. Protein is bodyweight × 1g/lb; fat and carbs fill
-//    the remaining calories.
+// 1. Calorie + macro targets — driven by Mifflin-St Jeor BMR, an activity
+//    multiplier, and a per-goal percent deficit/surplus. Waist circumference
+//    does NOT enter this path.
 //
-// 2. Body composition reference — Height-to-Abdomen Ratio (HRS) as the
-//    primary number (this is what AR 600-9 actually uses since 2023; the
-//    old multi-site neck+hip method is retired). RFM (Relative Fat Mass,
-//    Woolcott & Bergman 2018) gives a rough body-fat percentage from the
-//    same inputs for those who want a number. Both are shown as
-//    informational; neither feeds into calories.
+// 2. Body composition reference — Waist-to-Height Ratio (WHtR; called "HRS"
+//    in older Army docs but the standard name is WHtR). Current DoD
+//    guidance (effective 2026-01-01) uses WHtR ≤ 0.55 as the primary
+//    screening test. RFM (Relative Fat Mass, Woolcott & Bergman 2018)
+//    gives a rough body-fat percentage from the same inputs. Both are
+//    informational; neither feeds into calories or macros.
 
 const ARMY_TARGET_BF = 13.0;
-const HRS_STANDARD   = 0.55;   // AR 600-9: must be ≤ 0.55 to meet height-abdomen standard
+const HRS_STANDARD   = 0.55;   // AR 600-9 / DoD WHtR screening threshold
+
+// Sex-aware calorie floor — replaces the old flat 1200 kcal floor that
+// could starve a small male trying to train. Caller passes both `bmr` and
+// `gender`; final floor is `max(sex_floor, bmr × 1.1)`.
+const FLOOR_M = 1500;
+const FLOOR_F = 1200;
+// Caps on the percent-based deficit/surplus so very-active users don't end
+// up with absurd absolute deltas (e.g. 25% of a 4000 kcal TDEE = 1000 kcal).
+const MAX_CUT_DEFICIT  = 850;
+const MAX_BULK_SURPLUS = 500;
 
 const ACTIVITY_MULTIPLIERS = {
   sedentary:  1.2,
@@ -27,18 +36,21 @@ const ACTIVITY_MULTIPLIERS = {
 
 // ── Body fat reference (informational only, never feeds calorie math) ─────
 
-// Height-to-abdomen ratio. Lower is leaner. ≤ 0.55 meets the Army standard.
+// Waist-to-Height Ratio. Lower is leaner. ≤ 0.55 meets the Army screening.
+// Function name kept as `calcHRS` for backwards-compatibility with existing
+// imports; `calcWaistToHeightRatio` is the preferred alias going forward.
 export function calcHRS(waistIn, heightIn) {
   if (!waistIn || !heightIn) return null;
   return parseFloat((waistIn / heightIn).toFixed(3));
 }
+export const calcWaistToHeightRatio = calcHRS;
 
 export function hrsCategory(hrs) {
   if (hrs == null) return null;
-  if (hrs <= 0.43) return 'VERY LEAN';
+  if (hrs <= 0.43) return 'LOW RISK · LEAN';
   if (hrs <= 0.49) return 'ATHLETIC';
   if (hrs <= 0.55) return 'WITHIN STANDARD';
-  return 'OVER STANDARD';
+  return 'ABOVE SCREENING THRESHOLD';
 }
 
 // Relative Fat Mass (Woolcott & Bergman, 2018). Single-site, no neck.
@@ -62,36 +74,75 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, parseFloat(v.toFixed(1)))
 
 export function estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn }) {
   if (waistIn) {
-    return { bf: clamp(rfm({ heightIn, waistIn, gender }), 3, 50), method: 'rfm' };
+    return {
+      bf: clamp(rfm({ heightIn, waistIn, gender }), 3, 50),
+      method: 'rfm',
+      methodLabel: 'Estimate from waist + height',
+    };
   }
-  return { bf: clamp(deurenberg({ weightLbs, heightIn, age, gender }), 5, 50), method: 'bmi' };
+  return {
+    bf: clamp(deurenberg({ weightLbs, heightIn, age, gender }), 5, 50),
+    method: 'bmi',
+    methodLabel: 'Rough estimate · add waist for better result',
+  };
 }
 
 // ── Plan ──────────────────────────────────────────────────────────────────
 
-// Per-goal calorie + protein config.
-//
-// CUT:      ~1.75 lb/wk fat loss (middle of 1.5–2 lb/wk band). 875 kcal/day
-//           deficit. Protein at 1g/lb bodyweight with a 190g floor — anyone
-//           under ~190 lb still gets enough protein to preserve muscle in
-//           the deficit. Larger soldiers scale past the floor.
-// MAINTAIN: 0 delta. Protein 1g/lb.
-// BULK:     +400 kcal/day for ~0.8 lb/wk lean gain. Protein 1.1g/lb (10%
-//           bump on top of maintain, per spec) to support muscle synthesis.
-//
-// The 1200 kcal/day floor in calcPlan() catches small users whose TDEE-deficit
-// math would otherwise drop into starvation territory.
+// Per-goal config — calorie mode + protein multiplier. No fixed deltas, no
+// universal protein floor; everything scales with bodyweight and TDEE.
 const GOAL_CONFIG = {
-  cut:      { delta: -875, proteinPerLb: 1.0, minProtein: 190 },
-  maintain: { delta:    0, proteinPerLb: 1.0, minProtein: 0   },
-  bulk:     { delta:  400, proteinPerLb: 1.1, minProtein: 0   },
+  cutConservative: { mode: 'cut',  percent: 0.15, proteinPerLb: 0.9, label: 'CONSERVATIVE CUT' },
+  cutStandard:     { mode: 'cut',  percent: 0.20, proteinPerLb: 0.9, label: 'STANDARD CUT' },
+  cutAggressive:   { mode: 'cut',  percent: 0.25, proteinPerLb: 0.9, label: 'AGGRESSIVE CUT' },
+  maintain:        { mode: 'flat', percent: 0,    proteinPerLb: 0.8, label: 'MAINTAIN' },
+  bulk:            { mode: 'bulk', percent: 0.10, proteinPerLb: 0.9, label: 'BULK' },
 };
+
+// Backwards-compat shim — accept old goal IDs (`cut`) from existing
+// data.plan objects so a returning user's saved plan keeps working.
+const LEGACY_GOAL_MAP = { cut: 'cutStandard' };
+const resolveGoal = (g) => (GOAL_CONFIG[g] ? g : (LEGACY_GOAL_MAP[g] || 'cutStandard'));
+
+export function goalLabel(goalKey) {
+  const k = resolveGoal(goalKey);
+  return GOAL_CONFIG[k]?.label ?? String(goalKey).toUpperCase();
+}
+
+function goalCalories({ tdee, bmr, gender, goalKey }) {
+  const cfg   = GOAL_CONFIG[resolveGoal(goalKey)];
+  const floor = Math.max(gender === 'M' ? FLOOR_M : FLOOR_F, Math.round(bmr * 1.1));
+
+  if (cfg.mode === 'cut') {
+    const deficit = Math.min(Math.round(tdee * cfg.percent), MAX_CUT_DEFICIT);
+    return { goalCals: Math.max(floor, tdee - deficit), deficit };
+  }
+  if (cfg.mode === 'bulk') {
+    const surplus = Math.min(Math.round(tdee * cfg.percent), MAX_BULK_SURPLUS);
+    return { goalCals: tdee + surplus, deficit: -surplus };
+  }
+  return { goalCals: tdee, deficit: 0 };
+}
+
+function getMacros({ goalCals, weightLbs, goalKey }) {
+  const cfg = GOAL_CONFIG[resolveGoal(goalKey)];
+  const proteinG = Math.round(weightLbs * cfg.proteinPerLb);
+  // Fat floor: max(0.3 g/lb bodyweight, 22% of calories). 0.3 g/lb is the
+  // commonly-cited hormonal-health minimum; 22% is the lower bound of the
+  // 20–30% recommended fat share when calories are high enough to support it.
+  const fatG = Math.max(
+    Math.round(weightLbs * 0.3),
+    Math.round((goalCals * 0.22) / 9),
+  );
+  const carbG = Math.max(0, Math.round((goalCals - proteinG * 4 - fatG * 9) / 4));
+  return { protein: proteinG, fat: fatG, carbs: carbG };
+}
 
 export function calcPlan({
   weightLbs, heightIn, age, gender,
   waistIn,                      // reference only — does not affect cals/macros
   activityLevel,
-  goal = 'cut',
+  goal = 'cutStandard',
 }) {
   const weightKg = weightLbs * 0.453592;
   const heightCm = heightIn * 2.54;
@@ -102,31 +153,25 @@ export function calcPlan({
     : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
 
   const tdee = Math.round(bmr * (ACTIVITY_MULTIPLIERS[activityLevel] || 1.45));
+  const resolvedGoal = resolveGoal(goal);
 
-  const cfg = GOAL_CONFIG[goal] || GOAL_CONFIG.cut;
-  const goalCals = Math.max(1200, tdee + cfg.delta);
-
-  // Protein straight from bodyweight, multiplier varies by goal, with a
-  // per-goal floor (190g for cut so undersized soldiers still get enough
-  // to preserve muscle in a deficit).
-  const proteinG    = Math.max(cfg.minProtein || 0, Math.round(weightLbs * cfg.proteinPerLb));
-  // 25% of total cals from fat — minimum for hormonal health.
-  const fatG        = Math.round((goalCals * 0.25) / 9);
-  const proteinCals = proteinG * 4;
-  const fatCals     = fatG * 9;
-  const carbCals    = Math.max(0, goalCals - proteinCals - fatCals);
-  const carbG       = Math.round(carbCals / 4);
+  const { goalCals, deficit } = goalCalories({ tdee, bmr, gender, goalKey: resolvedGoal });
+  const { protein: proteinG, fat: fatG, carbs: carbG } =
+    getMacros({ goalCals, weightLbs, goalKey: resolvedGoal });
 
   // Body comp reference — does NOT influence the math above.
   const hrs = calcHRS(waistIn, heightIn);
-  const { bf, method } = estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn });
+  const { bf, method, methodLabel } = estimateBodyFat({ weightLbs, heightIn, age, gender, waistIn });
   const overStandard = hrs != null && hrs > HRS_STANDARD;
 
   // Fat-to-lose estimate — informational only (uses BF for the projection).
   const atTarget        = bf <= ARMY_TARGET_BF + 0.5;
   const fatToLoseLbs    = atTarget ? 0 : Math.max(0, parseFloat(((bf - ARMY_TARGET_BF) / 100 * weightLbs).toFixed(1)));
   const targetWeightLbs = atTarget ? weightLbs : parseFloat((weightLbs - fatToLoseLbs).toFixed(1));
-  const weeksToGoal     = Math.ceil(fatToLoseLbs / 1.75); // ~1.75 lb/wk at -875 deficit
+  // Derive weeks-to-goal from the actual deficit instead of a hard-coded rate.
+  // 3500 kcal/lb of fat. weeklyDeficit = deficit × 7. weeks = lbs / lbs-per-week.
+  const lbPerWeek = deficit > 0 ? (deficit * 7) / 3500 : 0;
+  const weeksToGoal = lbPerWeek > 0 ? Math.ceil(fatToLoseLbs / lbPerWeek) : 0;
 
   const waterOz = Math.round(weightLbs * 0.55);
   const weeklyMiles = activityLevel === 'sedentary' ? 8
@@ -138,6 +183,10 @@ export function calcPlan({
     // Reference (informational only)
     bf: parseFloat(bf.toFixed(1)),
     bfMethod: method,
+    bfMethodLabel: methodLabel,
+    // Deprecated alias — kept for one release so any existing call site
+    // checking `plan.bfAccurate` doesn't crash. Will be removed once
+    // consumers all switch to `bfMethodLabel`.
     bfAccurate: method === 'rfm',
     hrs,
     hrsCategory: hrsCategory(hrs),
@@ -151,8 +200,9 @@ export function calcPlan({
     // Energy
     bmr: Math.round(bmr),
     tdee,
-    goal,
+    goal: resolvedGoal,
     goalCals,
+    cutDeficit: deficit > 0 ? deficit : null, // null for maintain/bulk
 
     // Macros
     protein: proteinG,
@@ -165,10 +215,14 @@ export function calcPlan({
   };
 }
 
+// `chipLabel` is the short form used in Profile's compact goal-switcher row;
+// `label` is the full form used in Onboarding's tall cards.
 export const GOALS = [
-  { id: 'cut',      label: 'CUT',      sub: '~1.5–2 lb/week · 190g+ protein', delta: '−875 kcal' },
-  { id: 'maintain', label: 'MAINTAIN', sub: 'Hold weight, recomp',            delta: 'TDEE' },
-  { id: 'bulk',     label: 'BULK',     sub: 'Lean muscle gain · +10% protein', delta: '+400 kcal' },
+  { id: 'cutConservative', label: 'CONSERVATIVE CUT', chipLabel: 'CUT 15%',  sub: '~0.5–1 lb/wk · gentle deficit', delta: '−15% TDEE' },
+  { id: 'cutStandard',     label: 'STANDARD CUT',     chipLabel: 'CUT 20%',  sub: '~1–1.5 lb/wk · most common',    delta: '−20% TDEE' },
+  { id: 'cutAggressive',   label: 'AGGRESSIVE CUT',   chipLabel: 'CUT 25%',  sub: '~1.5–2 lb/wk · short cycles',   delta: '−25% TDEE' },
+  { id: 'maintain',        label: 'MAINTAIN',         chipLabel: 'MAINTAIN', sub: 'Hold weight, recomp',           delta: 'TDEE' },
+  { id: 'bulk',            label: 'BULK',             chipLabel: 'BULK',     sub: 'Lean muscle gain',              delta: '+10% TDEE' },
 ];
 
 export function planToGoals(plan) {

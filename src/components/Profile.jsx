@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
-import { formatHeight, calcPlan, planToGoals, GOALS } from '../lib/bodyComp.js';
+import { formatHeight, calcPlan, planToGoals, GOALS, goalLabel } from '../lib/bodyComp.js';
 
 const RANKS = [
   'PVT','PV2','PFC','SPC','CPL',
@@ -176,7 +176,7 @@ const Profile = ({ data, saveData, onReonboard }) => {
           <div style={st.planSummary}>
             <div style={st.planSummaryLabel}>
               CURRENT PLAN
-              <span style={st.planMethodTag}>· {(data.plan.goal || 'cut').toUpperCase()}</span>
+              <span style={st.planMethodTag}>· {goalLabel(data.plan.goal || 'cutStandard')}</span>
             </div>
             <div style={st.planSummaryRow}>
               <div style={st.planSummaryStat}>
@@ -203,7 +203,10 @@ const Profile = ({ data, saveData, onReonboard }) => {
               <div style={st.goalSwitcherLabel}>SWITCH MISSION</div>
               <div style={st.goalSwitcherRow}>
                 {GOALS.map((g) => {
-                  const active = (data.plan?.goal || 'cut') === g.id;
+                  // Treat the legacy 'cut' as the new 'cutStandard' for the
+                  // active-state check.
+                  const currentGoal = (data.plan?.goal === 'cut') ? 'cutStandard' : (data.plan?.goal || 'cutStandard');
+                  const active = currentGoal === g.id;
                   return (
                     <button
                       key={g.id}
@@ -230,7 +233,7 @@ const Profile = ({ data, saveData, onReonboard }) => {
                         setForm((f) => ({ ...f }));
                       }}
                     >
-                      {g.label}
+                      {g.chipLabel || g.label}
                     </button>
                   );
                 })}

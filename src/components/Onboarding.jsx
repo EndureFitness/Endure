@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
-import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS, GOALS } from '../lib/bodyComp.js';
+import { calcPlan, ALL_RANKS, ACTIVITY_LEVELS, GOALS, goalLabel } from '../lib/bodyComp.js';
 
 // AR 600-9 (2023+) uses a single waist measurement for both genders. No
 // neck or hip step. Calorie math is independent of waist; waist drives only
@@ -44,7 +44,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
           gender: profile.gender,
           waistIn: profile.waist ? parseFloat(profile.waist) : null,
           activityLevel: profile.activityLevel,
-          goal: profile.goal || 'cut',
+          goal: profile.goal || 'cutStandard',
         });
         setPlan(p);
         setStep((s) => s + 1);
@@ -351,7 +351,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
             <div style={st.planCard}>
               <div style={st.planCardLabel}>
                 BODY COMPOSITION REFERENCE
-                <span style={st.bfMethodTag}>· AR 600-9 STD: HRS ≤ 0.55</span>
+                <span style={st.bfMethodTag}>· AR 600-9 STD: WHtR ≤ 0.55</span>
               </div>
               {plan.hrs != null ? (
                 <>
@@ -361,7 +361,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                       <div style={{ ...st.hrsCategory, color: plan.overStandard ? '#cc6666' : 'var(--accent)' }}>
                         {plan.hrsCategory}
                       </div>
-                      <div style={st.hrsCaption}>HEIGHT-TO-ABDOMEN RATIO</div>
+                      <div style={st.hrsCaption}>WAIST-TO-HEIGHT RATIO</div>
                     </div>
                   </div>
                   <div style={st.hrsBar}>
@@ -378,7 +378,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 </>
               ) : (
                 <div style={st.bfWarning}>
-                  No waist measurement — body comp reference not available. Re-run intake with a waist measurement to see your HRS.
+                  No waist measurement — body comp reference not available. Re-run intake with a waist measurement to see your WHtR.
                 </div>
               )}
 
@@ -399,7 +399,7 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
             </div>
 
             <div style={st.planCard}>
-              <div style={st.planCardLabel}>DAILY NUTRITION · {plan.goal.toUpperCase()}</div>
+              <div style={st.planCardLabel}>DAILY NUTRITION · {goalLabel(plan.goal)}</div>
               <div style={st.nutritionGrid}>
                 <div style={st.nutriBox}>
                   <div style={st.nutriVal}>{plan.goalCals}</div>
@@ -423,7 +423,13 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
                 </div>
               </div>
               <div style={st.maintenanceNote}>
-                BMR {plan.bmr.toLocaleString()} · TDEE {plan.tdee.toLocaleString()} · {plan.goal === 'cut' ? `−${plan.tdee - plan.goalCals}` : plan.goal === 'bulk' ? `+${plan.goalCals - plan.tdee}` : 'AT TDEE'} kcal
+                BMR {plan.bmr.toLocaleString()} · TDEE {plan.tdee.toLocaleString()} · {
+                  plan.goalCals < plan.tdee
+                    ? `−${plan.tdee - plan.goalCals}`
+                    : plan.goalCals > plan.tdee
+                      ? `+${plan.goalCals - plan.tdee}`
+                      : 'AT TDEE'
+                } kcal
               </div>
             </div>
 
