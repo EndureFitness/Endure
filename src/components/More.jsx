@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { usePWAInstall } from '../lib/install.js';
 import { wipeEverything } from '../lib/storage.js';
 import OfflineMaps from './OfflineMaps.jsx';
@@ -446,81 +446,329 @@ const Water = ({ data, onBack, saveData }) => {
   );
 };
 
+// ── Sleep ───────────────────────────────────────────────────────────────────
+//
+// Army recommendation (FM 7-22): 7–9 hours nightly. We use 8 h as the target
+// for sleep-debt math; the streak counter requires ≥7 h consistent with the
+// minimum. Color is the sleep-specific indigo (#5a4a8e) — kept distinct from
+// the olive accent and water blue so the Dashboard glance can tell sections
+// apart at a peripheral read.
+const SLEEP_COLOR = '#7a6ab8';
+const SLEEP_TARGET = 8.0;
+const SLEEP_MIN = 7.0;
+
+const calcHours = (bed, wake) => {
+  if (!bed || !wake) return 0;
+  const [bh, bm] = bed.split(':').map(Number);
+  const [wh, wm] = wake.split(':').map(Number);
+  let mins = (wh * 60 + wm) - (bh * 60 + bm);
+  if (mins < 0) mins += 1440;
+  return mins / 60;
+};
+
+const QUALITIES = ['Poor', 'Fair', 'Good', 'Great'];
+
+function computeSleepStats(sleep) {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000);
+  const recent = sleep
+    .filter((s) => new Date(s.date) >= sevenDaysAgo)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const avg = recent.length > 0
+    ? recent.reduce((s, e) => s + (e.hours || 0), 0) / recent.length
+    : 0;
+
+  // Sleep debt — sum of (target - hours), positive only, over last 7 nights.
+  // Days without an entry count as 0 logged hours, full target debt.
+  let debt = 0;
+  for (let d = 0; d < 7; d++) {
+    const dayDate = new Date(now.getTime() - d * 86_400_000);
+    const entry = sleep.find((s) => new Date(s.date).toDateString() === dayDate.toDateString());
+    const hrs = entry?.hours || 0;
+    if (hrs < SLEEP_TARGET) debt += SLEEP_TARGET - hrs;
+  }
+
+  // Streak — consecutive days from today (inclusive of yesterday if today not logged)
+  // with hours ≥ SLEEP_MIN. Today not yet logged doesn't break the streak.
+  let streak = 0;
+  for (let d = 0; d < 60; d++) {
+    const dayDate = new Date(now.getTime() - d * 86_400_000);
+    const entry = sleep.find((s) => new Date(s.date).toDateString() === dayDate.toDateString());
+    if (!entry) {
+      if (d === 0 && dayDate.toDateString() === todayStr) continue; // today empty, fine
+      break;
+    }
+    if ((entry.hours || 0) >= SLEEP_MIN) streak++;
+    else break;
+  }
+
+  return { avg, debt, streak, recent };
+}
+
 const Sleep = ({ data, onBack, saveData }) => {
-  const [bedTime, setBedTime] = useState('23:15');
-  const [wakeTime, setWakeTime] = useState('06:30');
-  const [quality, setQuality] = useState('Good');
-  const [note, setNote] = useState('');
-  const [selectedDate] = useState(new Date().toDateString());
+  const sleep = data.sleep || [];
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toDateString());
+  const [savedFlash, setSavedFlash] = useState(false);
+  const sparkId = useId();
 
-  const calcHours = (bed, wake) => {
-    const [bh, bm] = bed.split(':').map(Number);
-    const [wh, wm] = wake.split(':').map(Number);
-    let mins = (wh * 60 + wm) - (bh * 60 + bm);
-    if (mins < 0) mins += 1440;
-    return (mins / 60).toFixed(2);
+  // Re-init form when the selected date changes — pre-fill from existing entry,
+  // or fall back to sensible defaults for a new entry.
+  const existing = sleep.find((s) => new Date(s.date).toDateString() === selectedDate);
+  const [bedTime, setBedTime] = useState(existing?.bedTime || '23:00');
+  const [wakeTime, setWakeTime] = useState(existing?.wakeTime || '06:30');
+  const [quality, setQuality] = useState(existing?.quality || 'Good');
+  const [note, setNote] = useState(existing?.note || '');
+
+  // Sync form to selectedDate's existing entry (or defaults) on date change.
+  useEffect(() => {
+    const e = sleep.find((s) => new Date(s.date).toDateString() === selectedDate);
+    setBedTime(e?.bedTime || '23:00');
+    setWakeTime(e?.wakeTime || '06:30');
+    setQuality(e?.quality || 'Good');
+    setNote(e?.note || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
+  const hours = calcHours(bedTime, wakeTime);
+  const pct = Math.min(hours / SLEEP_TARGET, 1);
+  const stats = computeSleepStats(sleep);
+
+  const todayStr = new Date().toDateString();
+  const isToday = selectedDate === todayStr;
+  const dateLabel = isToday
+    ? 'Last Night'
+    : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const shiftDate = (dir) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + dir);
+    if (d > new Date()) return; // no future entries
+    setSelectedDate(d.toDateString());
   };
-
-  const hours = parseFloat(calcHours(bedTime, wakeTime));
-  const pct = Math.min(hours / 9, 1);
 
   const logSleep = () => {
-    const entry = { id: Date.now(), date: new Date(selectedDate).toISOString(), bedTime, wakeTime, hours, quality, note };
-    const filtered = (data.sleep || []).filter(s => new Date(s.date).toDateString() !== selectedDate);
+    if (hours <= 0) { alert('Wake time must be after bed time.'); return; }
+    const entry = {
+      id: existing?.id || Date.now(),
+      date: new Date(selectedDate).toISOString(),
+      bedTime, wakeTime,
+      hours: parseFloat(hours.toFixed(2)),
+      quality, note,
+    };
+    const filtered = sleep.filter((s) => new Date(s.date).toDateString() !== selectedDate);
     saveData({ ...data, sleep: [...filtered, entry] });
-    onBack();
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1800);
   };
 
-  const qualities = ['Poor', 'Fair', 'Good', 'Great'];
+  const deleteEntry = (id) => {
+    if (!confirm('Delete this sleep entry?')) return;
+    saveData({ ...data, sleep: sleep.filter((s) => s.id !== id) });
+  };
+
+  // Trend sparkline — last 14 days, target line at SLEEP_TARGET.
+  const trendDays = 14;
+  const trendData = [];
+  for (let d = trendDays - 1; d >= 0; d--) {
+    const day = new Date(Date.now() - d * 86_400_000);
+    const entry = sleep.find((s) => new Date(s.date).toDateString() === day.toDateString());
+    trendData.push({ day, hours: entry?.hours ?? null });
+  }
+  const hasTrendData = trendData.some((p) => p.hours != null);
+
+  const recentNights = [...sleep]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 7);
 
   return (
     <div style={st.subScreen}>
       <div style={st.subHeader}>
-        <button style={st.backBtn} onClick={onBack}>←</button>
+        <button style={st.backBtn} onClick={onBack} aria-label="Back">←</button>
         <span style={st.subTitle}>SLEEP</span>
-        <div style={{ width:32 }}></div>
+        <div style={{ width: 32 }}></div>
       </div>
-      <div style={{ flex:1, overflowY:'auto', padding:'0 16px' }}>
-        <div style={st.dateNav}>
-          <span style={st.dateLabel}>{new Date(selectedDate).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' })}</span>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 24px' }}>
+        {/* Date navigation */}
+        <div style={st.sleepDateRow}>
+          <button style={st.sleepDateBtn} onClick={() => shiftDate(-1)} aria-label="Previous day">‹</button>
+          <span style={st.sleepDateLabel}>{dateLabel}</span>
+          <button
+            style={{ ...st.sleepDateBtn, opacity: isToday ? 0.3 : 1, cursor: isToday ? 'not-allowed' : 'pointer' }}
+            disabled={isToday}
+            onClick={() => shiftDate(1)}
+            aria-label="Next day"
+          >›</button>
         </div>
+
+        {/* Stats row */}
+        <div style={st.sleepStatsRow}>
+          <div style={st.sleepStatBox}>
+            <div style={st.sleepStatVal}>{stats.recent.length > 0 ? stats.avg.toFixed(1) : '—'}</div>
+            <div style={st.sleepStatLbl}>7-DAY AVG</div>
+          </div>
+          <div style={st.sleepStatBox}>
+            <div style={{ ...st.sleepStatVal, color: stats.debt > 7 ? 'var(--error)' : stats.debt > 3 ? 'var(--warn)' : 'var(--accent)' }}>
+              {stats.debt.toFixed(1)}h
+            </div>
+            <div style={st.sleepStatLbl}>SLEEP DEBT</div>
+          </div>
+          <div style={st.sleepStatBox}>
+            <div style={{ ...st.sleepStatVal, color: stats.streak > 0 ? SLEEP_COLOR : 'var(--text-muted)' }}>
+              {stats.streak}
+            </div>
+            <div style={st.sleepStatLbl}>STREAK</div>
+          </div>
+        </div>
+
+        {/* Big ring */}
         <div style={st.ringWrap}>
           <svg width="180" height="180" viewBox="0 0 180 180">
             <circle cx="90" cy="90" r="72" fill="none" stroke="var(--surface-2)" strokeWidth="12"/>
-            <circle cx="90" cy="90" r="72" fill="none" stroke="#5a4a8e" strokeWidth="12"
+            <circle cx="90" cy="90" r="72" fill="none" stroke={SLEEP_COLOR} strokeWidth="12"
               strokeDasharray={`${pct * 452} 452`}
               strokeLinecap="round"
               transform="rotate(-90 90 90)"
-              style={{ transition:'stroke-dasharray 0.4s ease' }}/>
-            <text x="90" y="78" textAnchor="middle" fill="var(--text)" fontSize="32" fontFamily="var(--font-head)" fontWeight="700">{hours.toFixed(2)}</text>
-            <text x="90" y="100" textAnchor="middle" fill="var(--text-muted)" fontSize="12" fontFamily="var(--font-body)">HOURS</text>
-            <text x="90" y="120" textAnchor="middle" fill="#5a4a8e" fontSize="10" fontFamily="var(--font-body)" letterSpacing="2">{quality.toUpperCase()}</text>
+              style={{ transition: 'stroke-dasharray 0.4s ease' }}/>
+            <text x="90" y="78" textAnchor="middle" fill="var(--text)" fontSize="34" fontFamily="var(--font-head)" fontWeight="800">{hours.toFixed(2)}</text>
+            <text x="90" y="98" textAnchor="middle" fill="var(--text-muted)" fontSize="11" fontFamily="var(--font-body)" letterSpacing="2">HOURS</text>
+            <text x="90" y="120" textAnchor="middle" fill={SLEEP_COLOR} fontSize="10" fontFamily="var(--font-body)" letterSpacing="2">
+              {hours >= SLEEP_TARGET ? '✓ AT TARGET' : `${(SLEEP_TARGET - hours).toFixed(1)}H UNDER`}
+            </text>
           </svg>
         </div>
+
+        {/* Bed / wake times */}
         <div style={st.timesRow}>
           <div style={st.timeBlock}>
             <div style={st.timeLabel}>TIME TO BED</div>
-            <input style={st.timeInput} type="time" value={bedTime} onChange={e => setBedTime(e.target.value)} />
+            <input style={st.timeInput} type="time" value={bedTime} onChange={(e) => setBedTime(e.target.value)} />
           </div>
           <div style={st.timeDivider}></div>
           <div style={st.timeBlock}>
             <div style={st.timeLabel}>WAKE TIME</div>
-            <input style={st.timeInput} type="time" value={wakeTime} onChange={e => setWakeTime(e.target.value)} />
+            <input style={st.timeInput} type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} />
           </div>
         </div>
+
+        {/* Quality */}
         <div style={st.qualityRow}>
           <div style={st.qualityLabel}>QUALITY</div>
           <div style={st.qualityBtns}>
-            {qualities.map(q => (
-              <button key={q} type="button" style={{ ...st.qualBtn, ...(quality === q ? st.qualBtnActive : {}) }} onClick={() => setQuality(q)}>{q}</button>
+            {QUALITIES.map((q) => (
+              <button key={q} type="button"
+                style={{ ...st.qualBtn, ...(quality === q ? st.qualBtnActive : {}) }}
+                onClick={() => setQuality(q)}
+              >{q}</button>
             ))}
           </div>
         </div>
+
+        {/* Note */}
         <div style={st.noteGroup}>
           <label style={st.noteLabel}>NOTE</label>
-          <input style={st.noteInput} type="text" placeholder="e.g. Felt rested" value={note} onChange={e => setNote(e.target.value)} />
+          <input
+            style={st.noteInput} type="text"
+            placeholder="e.g. Felt rested · Poor due to staff duty · Hard to fall asleep"
+            value={note} onChange={(e) => setNote(e.target.value)}
+          />
         </div>
-        <button style={st.logSleepBtn} onClick={logSleep}>LOG SLEEP</button>
+
+        <button
+          style={{ ...st.logSleepBtn, ...(savedFlash ? st.logSleepBtnSaved : {}) }}
+          onClick={logSleep}
+        >
+          {savedFlash ? '✓ SAVED' : existing ? 'UPDATE SLEEP' : 'LOG SLEEP'}
+        </button>
+
+        {/* 14-day trend */}
+        <div style={st.sleepSectionLabel}>14-DAY TREND</div>
+        <div style={st.sleepTrendCard}>
+          {hasTrendData ? (() => {
+            const W = 320, H = 80;
+            const yMax = Math.max(SLEEP_TARGET + 1, ...trendData.filter((p) => p.hours != null).map((p) => p.hours));
+            const yMin = 0;
+            const xFor = (i) => (i / (trendData.length - 1)) * W;
+            const yFor = (h) => H - ((h - yMin) / (yMax - yMin)) * (H - 12) - 6;
+            const targetY = yFor(SLEEP_TARGET);
+            return (
+              <svg width="100%" viewBox={`0 0 ${W} ${H + 14}`} preserveAspectRatio="none" style={{ display:'block', height:94 }}>
+                <defs>
+                  <linearGradient id={sparkId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={SLEEP_COLOR} stopOpacity="0.3"/>
+                    <stop offset="100%" stopColor={SLEEP_COLOR} stopOpacity="0"/>
+                  </linearGradient>
+                </defs>
+                {/* Target reference line */}
+                <line x1="0" x2={W} y1={targetY} y2={targetY} stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 3" opacity="0.5"/>
+                <text x={W} y={targetY - 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" letterSpacing="1">TARGET 8H</text>
+                {/* Per-day bars */}
+                {trendData.map((p, i) => {
+                  if (p.hours == null) return null;
+                  const x = xFor(i);
+                  const y = yFor(p.hours);
+                  const color = p.hours >= SLEEP_TARGET ? 'var(--accent)' : p.hours >= SLEEP_MIN ? SLEEP_COLOR : 'var(--warn)';
+                  return (
+                    <g key={i}>
+                      <line x1={x} x2={x} y1={H} y2={y} stroke={color} strokeWidth="3" strokeLinecap="round" opacity="0.85"/>
+                      <circle cx={x} cy={y} r="3" fill={color}/>
+                    </g>
+                  );
+                })}
+                {/* Day-of-week labels at the ends */}
+                <text x="0" y={H + 12} fontSize="9" fill="var(--text-muted)" letterSpacing="0.5">
+                  {trendData[0].day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </text>
+                <text x={W} y={H + 12} textAnchor="end" fontSize="9" fill="var(--text-muted)" letterSpacing="0.5">
+                  {trendData[trendData.length - 1].day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </text>
+              </svg>
+            );
+          })() : (
+            <div style={{ height:80, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)', fontSize:11 }}>
+              No sleep logged in the last 14 days.
+            </div>
+          )}
+        </div>
+
+        {/* Recent nights — tappable to edit, with delete action */}
+        {recentNights.length > 0 && (
+          <>
+            <div style={st.sleepSectionLabel}>RECENT NIGHTS</div>
+            {recentNights.map((entry) => {
+              const dayStr = new Date(entry.date).toDateString();
+              const isSel = dayStr === selectedDate;
+              const fmtDate = new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+              const hoursColor = (entry.hours || 0) >= SLEEP_TARGET ? 'var(--accent)' : (entry.hours || 0) >= SLEEP_MIN ? SLEEP_COLOR : 'var(--warn)';
+              return (
+                <div key={entry.id} style={{ ...st.sleepHistRow, ...(isSel ? st.sleepHistRowActive : {}) }}>
+                  <button
+                    style={st.sleepHistMain}
+                    onClick={() => setSelectedDate(dayStr)}
+                    aria-label={`Edit sleep for ${fmtDate}`}
+                  >
+                    <div style={st.sleepHistDate}>{fmtDate}</div>
+                    <div style={st.sleepHistMeta}>
+                      <span>{entry.bedTime} → {entry.wakeTime}</span>
+                      {entry.quality && <span style={st.sleepHistQual}> · {entry.quality.toUpperCase()}</span>}
+                    </div>
+                    {entry.note && <div style={st.sleepHistNote}>{entry.note}</div>}
+                  </button>
+                  <div style={st.sleepHistRight}>
+                    <div style={{ ...st.sleepHistHours, color: hoursColor }}>{(entry.hours || 0).toFixed(2)}h</div>
+                    <button
+                      style={st.sleepHistDel}
+                      onClick={() => deleteEntry(entry.id)}
+                      aria-label="Delete sleep entry"
+                    >✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
@@ -603,7 +851,28 @@ const st = {
   noteGroup: { marginBottom:14 },
   noteLabel: { display:'block', fontSize:10, letterSpacing:'0.1em', color:'var(--text-muted)', marginBottom:6, fontWeight:600 },
   noteInput: { width:'100%', height:44, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, padding:'0 12px', borderRadius:3, fontFamily:'var(--font-body)', boxSizing:'border-box', outline:'none' },
-  logSleepBtn: { width:'100%', height:52, background:'#5a4a8e', border:'none', color:'#fff', fontFamily:'var(--font-head)', fontSize:14, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:700, marginBottom:24 },
+  logSleepBtn: { width:'100%', height:52, background:'#7a6ab8', border:'none', color:'#fff', fontFamily:'var(--font-head)', fontSize:14, letterSpacing:'0.14em', cursor:'pointer', borderRadius:3, fontWeight:700, marginBottom:24, transition:'background 0.2s' },
+  logSleepBtnSaved: { background:'var(--accent)', color:'var(--bg)' },
+  // Sleep — date nav, stats, trend, history
+  sleepDateRow: { display:'flex', alignItems:'center', justifyContent:'center', gap:14, padding:'14px 0 8px' },
+  sleepDateBtn: { width:32, height:32, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, cursor:'pointer', borderRadius:3, lineHeight:'30px' },
+  sleepDateLabel: { fontFamily:'var(--font-head)', fontSize:14, color:'var(--text)', letterSpacing:'0.1em', fontWeight:700, minWidth:140, textAlign:'center' },
+  sleepStatsRow: { display:'flex', gap:8, marginBottom:14 },
+  sleepStatBox: { flex:1, background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:3, padding:'10px 6px', textAlign:'center' },
+  sleepStatVal: { fontFamily:'var(--font-head)', fontSize:20, color:'var(--text)', fontWeight:800, lineHeight:1 },
+  sleepStatLbl: { fontSize:8, color:'var(--text-muted)', letterSpacing:'0.1em', marginTop:4, fontWeight:600 },
+  sleepSectionLabel: { fontSize:10, letterSpacing:'0.14em', color:'var(--text-muted)', fontWeight:700, marginTop:18, marginBottom:10 },
+  sleepTrendCard: { background:'var(--surface-1)', border:'1px solid var(--border)', borderRadius:4, padding:'12px 14px', marginBottom:6 },
+  sleepHistRow: { display:'flex', alignItems:'center', gap:8, padding:'10px 0', borderBottom:'1px solid var(--border-subtle)' },
+  sleepHistRowActive: { background:'rgba(122,106,184,0.08)', borderRadius:3, paddingLeft:8, paddingRight:8 },
+  sleepHistMain: { flex:1, minWidth:0, background:'none', border:'none', textAlign:'left', cursor:'pointer', padding:0, color:'inherit' },
+  sleepHistDate: { fontSize:12, color:'var(--text)', fontWeight:700, letterSpacing:'0.04em' },
+  sleepHistMeta: { fontSize:10, color:'var(--text-muted)', marginTop:2 },
+  sleepHistQual: { color:'var(--text-dim)' },
+  sleepHistNote: { fontSize:10, color:'var(--text-dim)', marginTop:2, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
+  sleepHistRight: { display:'flex', alignItems:'center', gap:8, flexShrink:0 },
+  sleepHistHours: { fontFamily:'var(--font-head)', fontSize:16, fontWeight:700, minWidth:50, textAlign:'right' },
+  sleepHistDel: { width:32, height:32, background:'none', border:'1px solid var(--border)', color:'var(--text-muted)', fontSize:12, cursor:'pointer', borderRadius:3, padding:0 },
 };
 
 export default More;
