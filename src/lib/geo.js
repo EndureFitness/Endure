@@ -50,6 +50,7 @@ export function useGeolocationTracker({ active, activityType = 'Cardio' }) {
   const lastPointRef = useRef(null);
   const lastAcceptedTimeRef = useRef(null);
   const lastAltRef = useRef(null);
+  const stalledTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!active) return;
@@ -66,6 +67,13 @@ export function useGeolocationTracker({ active, activityType = 'Cardio' }) {
     lastPointRef.current = null;
     lastAcceptedTimeRef.current = null;
     lastAltRef.current = null;
+
+    // If no fix arrives within 30s, transition to a 'stalled' state so the UI
+    // can surface that GPS isn't producing data — instead of indefinitely
+    // hanging on "WAIT".
+    stalledTimeoutRef.current = setTimeout(() => {
+      if (!lastPointRef.current) setStatus('stalled');
+    }, 30_000);
 
     const onPos = (pos) => {
       const { latitude: lat, longitude: lng, accuracy, altitude, altitudeAccuracy, speed } = pos.coords;
@@ -123,6 +131,10 @@ export function useGeolocationTracker({ active, activityType = 'Cardio' }) {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
+      }
+      if (stalledTimeoutRef.current) {
+        clearTimeout(stalledTimeoutRef.current);
+        stalledTimeoutRef.current = null;
       }
     };
     // We intentionally don't depend on `status` — it's an output, not an input.

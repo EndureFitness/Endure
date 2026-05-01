@@ -94,8 +94,14 @@ export default function Onboarding({ onComplete, existingProfile = {} }) {
         </div>
       )}
 
-      {step > 1 && step < STEPS.length - 2 && (
-        <button style={st.backBtn} onClick={back}>← BACK</button>
+      {/* BACK is shown on every form step (1..ACTIVITY) AND on the PLAN review */}
+      {/* so users can revisit GOAL/inputs before tapping ACCEPT MISSION.       */}
+      {((step > 1 && step < STEPS.length - 2) || currentStep === 'PLAN') && (
+        <button style={st.backBtn} onClick={() => {
+          // From PLAN, jump straight back to GOAL (skip the GENERATING screen).
+          if (currentStep === 'PLAN') setStep(STEPS.indexOf('GOAL'));
+          else back();
+        }}>← BACK</button>
       )}
 
       <div style={{

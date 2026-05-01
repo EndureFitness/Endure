@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import RankInsignia from './RankInsignia.jsx';
-import { formatHeight } from '../lib/bodyComp.js';
+import { formatHeight, calcPlan, planToGoals, GOALS } from '../lib/bodyComp.js';
 
 const RANKS = [
   'PVT','PV2','PFC','SPC','CPL',
@@ -162,7 +162,10 @@ const Profile = ({ data, saveData, onReonboard }) => {
 
         {data.plan && (
           <div style={st.planSummary}>
-            <div style={st.planSummaryLabel}>CURRENT PLAN</div>
+            <div style={st.planSummaryLabel}>
+              CURRENT PLAN
+              <span style={st.planMethodTag}>· {(data.plan.goal || 'cut').toUpperCase()}</span>
+            </div>
             <div style={st.planSummaryRow}>
               <div style={st.planSummaryStat}>
                 <span style={st.planSummaryVal}>{data.plan.goalCals}</span>
@@ -179,6 +182,46 @@ const Profile = ({ data, saveData, onReonboard }) => {
               <div style={st.planSummaryStat}>
                 <span style={st.planSummaryVal}>{data.plan.fat}g</span>
                 <span style={st.planSummaryLbl}>FAT</span>
+              </div>
+            </div>
+
+            {/* Quick goal switcher — recomputes the plan from existing profile */}
+            {/* without making the user re-walk the 8-step intake.              */}
+            <div style={st.goalSwitcher}>
+              <div style={st.goalSwitcherLabel}>SWITCH MISSION</div>
+              <div style={st.goalSwitcherRow}>
+                {GOALS.map((g) => {
+                  const active = (data.plan?.goal || 'cut') === g.id;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      style={{ ...st.goalChip, ...(active ? st.goalChipActive : {}) }}
+                      onClick={() => {
+                        const heightInTotal = parseInt(profile.height) || 0;
+                        const newPlan = calcPlan({
+                          weightLbs: parseFloat(profile.weight),
+                          heightIn: heightInTotal,
+                          age: parseInt(profile.age),
+                          gender: profile.gender,
+                          waistIn: profile.waist ? parseFloat(profile.waist) : null,
+                          activityLevel: profile.activityLevel,
+                          goal: g.id,
+                        });
+                        saveData({
+                          ...data,
+                          plan: newPlan,
+                          nutritionGoals: planToGoals(newPlan),
+                          waterGoal: newPlan.waterOz,
+                          profile: { ...profile, goal: g.id },
+                        });
+                        setForm((f) => ({ ...f }));
+                      }}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -223,6 +266,11 @@ const st = {
   planSummary: { background:'rgba(122,140,66,0.06)', border:'1px solid rgba(122,140,66,0.25)', borderRadius:4, padding:'12px 14px', marginBottom:12 },
   planSummaryLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--accent)', fontWeight:700, marginBottom:8 },
   planMethodTag: { fontSize:8, color:'var(--text-muted)', marginLeft:8, fontWeight:600, letterSpacing:'0.1em' },
+  goalSwitcher: { marginTop:14, paddingTop:12, borderTop:'1px solid rgba(122,140,66,0.2)' },
+  goalSwitcherLabel: { fontSize:9, letterSpacing:'0.14em', color:'var(--text-muted)', fontWeight:700, marginBottom:8 },
+  goalSwitcherRow: { display:'flex', gap:6 },
+  goalChip: { flex:1, height:36, background:'var(--surface-1)', border:'1px solid var(--border)', color:'var(--text-muted)', fontFamily:'var(--font-head)', fontSize:11, letterSpacing:'0.12em', cursor:'pointer', borderRadius:3, fontWeight:700 },
+  goalChipActive: { background:'rgba(122,140,66,0.18)', borderColor:'var(--accent)', color:'var(--accent)' },
   planSummaryRow: { display:'flex', gap:8 },
   planSummaryStat: { flex:1, textAlign:'center' },
   planSummaryVal: { display:'block', fontFamily:'var(--font-head)', fontSize:18, color:'var(--text)', fontWeight:800, lineHeight:1 },

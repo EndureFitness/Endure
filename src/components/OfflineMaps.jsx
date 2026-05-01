@@ -122,7 +122,10 @@ function AddArea({ onBack, onSaved }) {
       miles,
       minZ: 13,
       maxZ: 17,
-      tiles: result.tiles,
+      // Save the tiles that actually downloaded successfully — not the total
+      // attempted — so the stored area metadata reflects real coverage.
+      tiles: result.succeeded,
+      requested: result.tiles,
       bytes: result.bytes,
       savedAt: new Date().toISOString(),
     });

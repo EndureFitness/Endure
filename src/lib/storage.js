@@ -50,8 +50,16 @@ export function saveData(data) {
   }
 }
 
+// Offline-areas index lives under a separate localStorage key (managed by
+// lib/offlineMaps.js). Bundle it into the export so a backup→wipe→restore
+// round-trip preserves saved training-area metadata too.
+const OFFLINE_KEY = 'endure_offline_v1';
+
 export function exportJSON(data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  let offlineAreas = null;
+  try { offlineAreas = JSON.parse(localStorage.getItem(OFFLINE_KEY) || 'null'); } catch {}
+  const payload = { ...data, _offlineAreas: offlineAreas };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -67,7 +75,13 @@ export function importJSON(file) {
       try {
         const parsed = JSON.parse(ev.target.result);
         if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object');
-        resolve({ ...SEED, ...parsed });
+        // Restore the offline-areas index if present, then strip it from the
+        // returned payload so the main store stays clean.
+        if (parsed._offlineAreas) {
+          try { localStorage.setItem(OFFLINE_KEY, JSON.stringify(parsed._offlineAreas)); } catch {}
+        }
+        const { _offlineAreas, ...mainData } = parsed;
+        resolve({ ...SEED, ...mainData });
       } catch (e) {
         reject(e);
       }

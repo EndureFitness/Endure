@@ -177,9 +177,17 @@ const WeighIn = ({ data, onBack, saveData }) => {
 
   const logWeight = () => {
     const val = parseFloat(input);
-    if (!val || val < 50 || val > 500) return;
+    if (!val || val < 50 || val > 500) {
+      alert('Enter a weight between 50 and 500 lbs.');
+      return;
+    }
+    // Replace today's entry instead of stacking duplicates — most users weigh
+    // in once a day; logging twice should overwrite, not graph the same point
+    // twice.
+    const todayStr = new Date().toDateString();
+    const filtered = weights.filter(w => new Date(w.date).toDateString() !== todayStr);
     const entry = { id: Date.now(), date: new Date().toISOString(), weight: val };
-    saveData({ ...data, weights: [...weights, entry] });
+    saveData({ ...data, weights: [...filtered, entry] });
     setInput('');
   };
 

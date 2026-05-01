@@ -134,7 +134,7 @@ export default function Cardio({ data, saveData }) {
 
   // ── Active session ───────────────────────────────────────────────────────
   if (mode === 'active') {
-    const showDeniedBanner = tracker.status === 'denied' || tracker.status === 'unavailable' || tracker.status === 'error';
+    const showDeniedBanner = tracker.status === 'denied' || tracker.status === 'unavailable' || tracker.status === 'error' || tracker.status === 'stalled';
     return (
       <div style={st.screen}>
         <div style={st.activeHeader}>
@@ -143,18 +143,27 @@ export default function Cardio({ data, saveData }) {
           <div style={st.gpsIndicator}>
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
-              background: tracker.status === 'tracking' ? 'var(--accent)' : '#cc6666',
+              background: tracker.status === 'tracking' ? 'var(--accent)'
+                : tracker.status === 'requesting' ? '#d4ad6a'
+                : '#cc6666',
               display: 'inline-block', marginRight: 6,
             }}/>
             <span style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-              {tracker.status === 'tracking' ? 'GPS' : tracker.status === 'requesting' ? 'WAIT' : 'NO GPS'}
+              {tracker.status === 'tracking'  ? 'GPS'
+              : tracker.status === 'requesting' ? 'WAIT'
+              : tracker.status === 'stalled'    ? 'STALLED'
+              : 'NO GPS'}
             </span>
           </div>
         </div>
 
         {showDeniedBanner && (
           <div style={st.banner}>
-            GPS unavailable. {tracker.status === 'denied' ? 'Enable location in browser settings to track distance and route.' : 'Track time only or log manually after your session.'}
+            {tracker.status === 'denied'
+              ? 'GPS denied. Enable location in browser settings to track distance and route.'
+              : tracker.status === 'stalled'
+              ? 'No GPS fix after 30 s. Try moving outdoors — duration and steps still being tracked.'
+              : 'GPS unavailable. Track time only or log manually after your session.'}
           </div>
         )}
 
@@ -327,10 +336,16 @@ function ManualEntry({ activityType: initialType, onCancel, onSave }) {
   const [duration, setDuration] = useState({ h: '', m: '', s: '' });
   const [distance, setDistance] = useState('');
 
+  // datetime-local doesn't have a built-in past-only validation, so we cap
+  // the max prop to "now" — most browsers respect this, and we also re-check
+  // on submit.
+  const nowIso = new Date().toISOString().slice(0, 16);
+
   const submit = () => {
     const sec = (parseInt(duration.h) || 0) * 3600 + (parseInt(duration.m) || 0) * 60 + (parseInt(duration.s) || 0);
     const dist = parseFloat(distance) || 0;
     if (sec === 0) { alert('Enter a duration.'); return; }
+    if (new Date(date).getTime() > Date.now()) { alert('Session date cannot be in the future.'); return; }
     const session = {
       id: Date.now(),
       type: activityType,
@@ -370,7 +385,7 @@ function ManualEntry({ activityType: initialType, onCancel, onSave }) {
 
         <div style={{ marginTop: 16 }}>
           <label style={st.fieldLabel}>WHEN</label>
-          <input style={st.input} type="datetime-local" value={date} onChange={e => setDate(e.target.value)} />
+          <input style={st.input} type="datetime-local" value={date} max={nowIso} onChange={e => setDate(e.target.value)} />
         </div>
 
         <div style={{ marginTop: 12 }}>
